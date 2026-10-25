@@ -23,10 +23,23 @@ st.set_page_config(page_title="AI 金句爆款封面生成器", layout="wide", p
 
 st.title("🔥 AI 视频金句时间戳同步 & 华丽特效封面生成器")
 
-# 侧边栏 API Key 配置（默认为 Groq 配置）
+# 侧边栏 API 配置（支持动态切换模型）
 st.sidebar.header("🔑 API 配置")
 api_key = st.sidebar.text_input("Groq API Key", type="password", help="请在此处输入你的 Groq API Key")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
+
+# 模型下拉菜单：若遇到 404 报错直接在网页侧边栏切换模型即可
+model_choice = st.sidebar.selectbox(
+    "选择 Groq AI 模型",
+    [
+        "llama-3.1-8b-instant",       # 默认：全员可用，速度最快
+        "llama-3.1-70b-versatile",     # 高质量大模型
+        "llama3-8b-8192",              # 经典 Llama 3 8B
+        "llama3-70b-8192",             # 经典 Llama 3 70B
+        "mixtral-8x7b-32768"           # Mixtral 混合专家模型
+    ],
+    index=0
+)
 
 uploaded_file = st.file_uploader("上传短视频文件 (MP4 / MOV)", type=["mp4", "mov"])
 
@@ -53,7 +66,7 @@ if uploaded_file is not None and api_key:
                     {"start": 9.5, "end": 13.0, "text": "一个人加一套极速交付流程，你就能成为一家高效运行的公司。"}
                 ]
 
-            with st.spinner("3/4 大模型提炼金句并匹配精准画面时间戳..."):
+            with st.spinner(f"3/4 大模型 ({model_choice}) 提炼金句并匹配精准画面时间戳..."):
                 prompt = f"""
                 你是一个社媒爆款标题专家。请分析以下带时间戳的视频字幕，挑选出最震撼、最能拉满点击率的 1 句金句。
                 字幕数据：{json.dumps(mock_segments, ensure_ascii=False)}
@@ -67,9 +80,9 @@ if uploaded_file is not None and api_key:
                 }}
                 """
 
-                # 这里已经帮为你替换为 Groq 支持的适配模型：llama-3.3-70b-versatile
+                # 使用侧边栏选择的动态模型
                 response = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model=model_choice,
                     messages=[{"role": "user", "content": prompt}],
                     response_format={"type": "json_object"}
                 )
@@ -129,62 +142,4 @@ if uploaded_file is not None and api_key:
                         .quote-text {{
                             color: #FFFFFF; font-size: 76px; font-weight: 900;
                             line-height: 1.3; letter-spacing: 3px;
-                            text-shadow: 0 5px 15px rgba(0,0,0,0.8);
-                        }}
-                        .glow-word {{
-                            color: #FFE600;
-                            text-shadow: 0 0 20px rgba(255, 230, 0, 0.8),
-                                         0 0 40px rgba(255, 230, 0, 0.5);
-                            display: inline-block; padding: 0 10px;
-                        }}
-                        .footer {{
-                            position: relative; z-index: 2;
-                            display: flex; justify-content: space-between; align-items: center;
-                            color: rgba(255, 255, 255, 0.7); font-size: 28px; font-weight: 600;
-                            border-top: 1px solid rgba(255, 255, 255, 0.2); padding-top: 40px;
-                        }}
-                        .timestamp-badge {{
-                            background: rgba(0,0,0,0.5); padding: 8px 20px;
-                            border-radius: 12px; color: #FFE600; font-family: monospace;
-                        }}
-                    </style>
-                </head>
-                <body>
-                    <div class="overlay"></div>
-                    <div class="header"><div class="tag"># {tag}</div></div>
-                    <div class="card-container"><div class="quote-text">“{formatted_quote}”</div></div>
-                    <div class="footer">
-                        <span>⚡ AI 时间戳同步生成</span>
-                        <span class="timestamp-badge">帧对齐: {target_time:.1f}s</span>
-                    </div>
-                </body>
-                </html>
-                """
-
-                with open("render_template.html", "w", encoding="utf-8") as f:
-                    f.write(html_template)
-
-                with sync_playwright() as p:
-                    browser = p.chromium.launch()
-                    page = browser.new_page(viewport={"width": 1080, "height": 1440})
-                    page.goto(f"file://{os.path.abspath('render_template.html')}")
-                    page.screenshot(path="final_cover.png")
-                    browser.close()
-
-            st.success(f"🎯 渲染完成！已自动匹配视频第 {target_time:.1f} 秒的金句画面！")
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("💡 诊断与原帧")
-                st.info(f"**金句**：{quote}\n\n**高亮词**：`{highlight_word}`")
-                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒截图", use_container_width=True)
-            with col2:
-                st.subheader("✨ 华丽爆款封面")
-                st.image("final_cover.png", use_container_width=True)
-                with open("final_cover.png", "rb") as f:
-                    st.download_button("📥 下载 4K 华丽封面", f, file_name="luxury_cover.png", mime="image/png")
-
-        except Exception as e:
-            st.error(f"处理失败: {str(e)}")
-elif not api_key:
-    st.info("💡 请在左侧侧边栏输入你的 Groq API Key 以启动系统。")
+                            text-shadow: 0 5px 15px rgba(0,0,0
