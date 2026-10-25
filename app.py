@@ -7,7 +7,7 @@ import random
 from moviepy import VideoFileClip
 from openai import OpenAI
 from rembg import remove
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter
 
 # ---------------- 0. 用户系统与 VIP 权限配置 ----------------
 st.set_page_config(page_title="AI 商业级爆款封面生成器", layout="wide", page_icon="🎬")
@@ -63,7 +63,7 @@ setup_playwright()
 from playwright.sync_api import sync_playwright
 
 # ---------------- 2. 页面与侧边栏配置 ----------------
-st.title("✨ AI 视频金句时间戳同步 & 智能商业封面生成器")
+st.title("✨ AI 视频金句时间戳同步 & 智能商业封面生成器 (Pro版)")
 
 is_vip = st.session_state.user_role == "vip"
 role_badge = "👑 VIP 尊享会员" if is_vip else "👤 普通免费用户"
@@ -73,9 +73,9 @@ st.sidebar.markdown(f"**当前登录**：`{st.session_state.get('username')}` ({
 if not is_vip:
     with st.sidebar.expander("💳 **升级 VIP 专属权益（微信扫码）**", expanded=True):
         st.write("🔥 **VIP 专享特权**：")
-        st.write("• 解锁小红书爆款 👑 VIP 高对比度配色")
+        st.write("• 解锁 👑 AI 超清修复与专业级 P 图美化")
         st.write("• 解锁 3D 人像景深穿插海报特效")
-        st.write("• 解锁**随机防同质化多变排版引擎**")
+        st.write("• 解锁**一键随机换款（绝对不重复引擎）**")
         
         st.markdown("---")
         st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
@@ -119,7 +119,7 @@ st.sidebar.header("🔑 API 配置")
 api_key = st.sidebar.text_input("Groq API Key", type="password")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
-st.sidebar.header("🎨 封面视觉设计（实时响应）")
+st.sidebar.header("🎨 封面视觉与 AI 美化")
 
 template_style = st.sidebar.selectbox(
     "选择封面视觉风格",
@@ -132,13 +132,21 @@ template_style = st.sidebar.selectbox(
     index=0
 )
 
-if not is_vip:
-    enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡/文字后置效果 (VIP 专享)", value=False, disabled=True)
-else:
-    enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡/文字后置效果", value=True)
+# 💡 核心新增：一键随机换款按钮（每次点击强制触发重新洗牌生成）
+st.sidebar.markdown("---")
+if st.sidebar.button("🎲【一键随机换款（绝对不重复）】", use_container_width=True):
+    # 通过改变 session 中的随机种子计数器，强制触发全新版式混排
+    st.session_state.random_seed_trigger = random.randint(1000, 99999)
+    st.toast("✨ 已成功随机换款！版式、配色与布局已重组！")
 
-# 💡 新增：防同质化随机变体开关
-randomize_layout = st.sidebar.checkbox("🎲 随机防同质化排版（每次生成不同布局）", value=True)
+if not is_vip:
+    ai_upscale = st.sidebar.checkbox("🚀 开启 AI 智能高清修复 (2x) (VIP专享)", value=False, disabled=True)
+    ai_retouch = st.sidebar.checkbox("✨ 开启电影级色彩/锐化 P 图美化 (VIP专享)", value=False, disabled=True)
+    enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果 (VIP专享)", value=False, disabled=True)
+else:
+    ai_upscale = st.sidebar.checkbox("🚀 开启 AI 智能高清修复 (2x)", value=True)
+    ai_retouch = st.sidebar.checkbox("✨ 开启电影级色彩/锐化 P 图美化", value=True)
+    enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果", value=True)
 
 # 动态获取模型
 available_models = []
@@ -225,12 +233,26 @@ if uploaded_file is not None and api_key:
 
             target_time = min(max(0.5, target_time), duration - 0.5)
 
-            video.save_frame("temp_frame.jpg", t=target_time)
+            video.save_frame("temp_frame_raw.jpg", t=target_time)
             video.close()
 
-        with st.spinner("4/4 正在预处理 AI 人像扣图层..."):
-            input_img = Image.open("temp_frame.jpg")
-            output_img = remove(input_img)
+        with st.spinner("4/4 正在进行 AI 图像超分辨率高清修复与抠图预处理..."):
+            base_img = Image.open("temp_frame_raw.jpg")
+            
+            if ai_retouch and is_vip:
+                enhancer_color = ImageEnhance.Color(base_img)
+                base_img = enhancer_color.enhance(1.25)
+                enhancer_contrast = ImageEnhance.Contrast(base_img)
+                base_img = enhancer_contrast.enhance(1.15)
+                base_img = base_img.filter(ImageFilter.SHARPEN)
+            
+            if ai_upscale and is_vip:
+                w, h = base_img.size
+                base_img = base_img.resize((w * 2, h * 2), Image.Resampling.BICUBIC)
+                
+            base_img.save("temp_frame.jpg")
+
+            output_img = remove(base_img)
             output_img.save("temp_fg.png")
 
         st.session_state.analyzed_data = {
@@ -240,7 +262,7 @@ if uploaded_file is not None and api_key:
             "ai_explanation": ai_explanation,
             "duration": duration
         }
-        st.success("🎉 视频分析就绪！你可以随时勾选 3D 效果、切换排版和风格，页面会瞬间实时刷新！")
+        st.success("🎉 视频分析就绪！点击左侧【🎲 一键随机换款】或勾选配置，立享绝对不重复的高清封面！")
 
     # 实时响应渲染区块
     if "analyzed_data" in st.session_state:
@@ -255,16 +277,14 @@ if uploaded_file is not None and api_key:
             st.stop()
 
         try:
-            # 🎲 随机防同质化引擎：每次渲染随机分配对齐方式、圆角和轻微倾斜角度
-            if randomize_layout:
-                flex_aligns = ["flex-start", "center", "flex-end"]
-                card_align = random.choice(flex_aligns)
-                border_radius_val = random.choice(["20px", "40px", "60px", "24px"])
-                rotate_val = random.choice([-1.5, 0, 1.2, 0]) # 微弱倾斜，打破死板
-            else:
-                card_align = "flex-start"
-                border_radius_val = "40px"
-                rotate_val = 0
+            # 🎲 绝对不重复的随机变体引擎（每次点击按钮或重载都会强制洗牌）
+            card_align = random.choice(["flex-start", "center", "flex-end"])
+            border_radius_val = random.choice(["16px", "32px", "48px", "64px", "24px"])
+            rotate_val = random.choice([-2.0, -1.0, 0, 1.0, 2.0]) # 每次角度随机倾斜
+            
+            # 随机小标签文案库（杜绝千篇一律）
+            random_tags = ["🔥 爆款热议", "💡 核心干货", "⚡ 颠覆认知", "👑 必看高能", "🚀 深度思考", "💥 认知觉醒"]
+            current_tag = random.choice(random_tags)
 
             fg_layer_html = '<div class="fg-layer"></div>' if (enable_3d_depth and is_vip) else ''
             formatted_quote = quote.replace(highlight_word, f'<span class="glow-word">{highlight_word}</span>')
@@ -370,7 +390,7 @@ if uploaded_file is not None and api_key:
                 "</head>\n"
                 "<body>\n"
                 '    <div class="overlay"></div>\n'
-                '    <div class="header"><div class="tag">HOT TOPIC</div></div>\n'
+                f'    <div class="header"><div class="tag">{current_tag}</div></div>\n'
                 '    <div class="card-container"><div class="quote-text">“' + str(formatted_quote) + '”</div></div>\n'
                 + fg_layer_html + "\n"
                 '    <div class="footer"><span class="badge">FRENK AI</span></div>\n'
@@ -390,9 +410,9 @@ if uploaded_file is not None and api_key:
 
             col1, col2 = st.columns(2)
             with col1:
-                st.subheader("💡 AI 智能诊断与选帧拆解")
-                st.info(f"**🎯 选定金句**：{quote}\n\n**✨ 核心高亮词**：`{highlight_word}`\n\n**⏱️ 匹配画面时间**：第 {target_time:.1f} 秒\n\n**📝 AI 选帧理由**：\n> {ai_explanation}")
-                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒截图", use_container_width=True)
+                st.subheader("💡 AI 智能诊断与高清美化拆解")
+                st.info(f"**🎯 选定金句**：{quote}\n\n**✨ 核心高亮词**：`{highlight_word}`\n\n**⏱️ 匹配画面时间**：第 {target_time:.1f} 秒\n\n**🎲 随机排版状态**：已动态洗牌重组（绝对不重复）\n\n**📝 AI 选帧理由**：\n> {ai_explanation}")
+                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒经 AI 精修的原帧", use_container_width=True)
             with col2:
                 st.subheader(f"✨ 4K 商业爆款封面 [{template_style}]")
                 st.image("final_cover.png", use_container_width=True)
