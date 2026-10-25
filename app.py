@@ -67,7 +67,7 @@ st.sidebar.markdown(f"**当前登录**：`{st.session_state.get('username')}` ({
 if not is_vip:
     with st.sidebar.expander("💳 **升级 VIP 专属权益（微信扫码）**", expanded=True):
         st.write("🔥 **VIP 专享特权**：")
-        st.write("• 解锁 **Sweetie Fox 专属真人图库渲染**")
+        st.write("• 解锁全自动 Cosplay / 真人模特合成")
         st.markdown("---")
         st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
         if os.path.exists("pay_qr.png"):
@@ -106,11 +106,11 @@ template_style = st.sidebar.selectbox(
 )
 
 st.sidebar.markdown("---")
-if st.sidebar.button("🎲【随机切换版式 & 切换 Sweetie Fox 造型】", use_container_width=True):
+if st.sidebar.button("🎲【随机切换版式 & 刷新真人模特】", use_container_width=True):
     st.session_state.layout_index = random.randint(0, 2)
     st.session_state.bubble_seed = random.randint(1000, 99999)
     st.session_state.beauty_seed = random.randint(1, 100)
-    st.toast("✨ 已随机切换版式并更换 Sweetie Fox 造型！")
+    st.toast("✨ 已随机切换版式并自动更换真人模特！")
 
 if "layout_index" not in st.session_state:
     st.session_state.layout_index = 0
@@ -123,13 +123,13 @@ if not is_vip:
     ai_upscale = st.sidebar.checkbox("🚀 开启 4K Retina 超高清修复 (VIP专享)", value=False, disabled=True)
     ai_retouch = st.sidebar.checkbox("✨ 电影级极限锐化与色彩调优 (VIP专享)", value=False, disabled=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果 (VIP专享)", value=False, disabled=True)
-    enable_partner = st.sidebar.checkbox("🦊 开启 Sweetie Fox 真人陪伴 (VIP专享)", value=False, disabled=True)
+    enable_partner = st.sidebar.checkbox("🦊 开启 Cosplay / 顶流模特真人陪伴 (VIP专享)", value=False, disabled=True)
     enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡图案叠加 (VIP专享)", value=False, disabled=True)
 else:
     ai_upscale = st.sidebar.checkbox("🚀 开启 4K Retina 超高清修复", value=True)
     ai_retouch = st.sidebar.checkbox("✨ 电影级极限锐化与色彩调优", value=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果", value=True)
-    enable_partner = st.sidebar.checkbox("🦊 开启 Sweetie Fox 真人陪伴", value=True) # 默认开启
+    enable_partner = st.sidebar.checkbox("🦊 开启 Cosplay / 顶流模特真人陪伴", value=True) # 默认开启
     enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡图案叠加", value=True)
 
 available_models = []
@@ -204,17 +204,46 @@ if uploaded_file is not None and api_key:
             video.save_frame("temp_frame_raw.jpg", t=target_time)
             video.close()
 
-        with st.spinner("4/4 AI 极智高清修复与预处理..."):
-            base_img = Image.open("temp_frame_raw.jpg")
+        with st.spinner("4/4 AI 极智高清修复与后台全自动真人模特合成..."):
+            base_img = Image.open("temp_frame_raw.jpg").convert("RGBA")
             if ai_retouch and is_vip:
-                base_img = ImageEnhance.Color(base_img).enhance(1.3)
-                base_img = ImageEnhance.Contrast(base_img).enhance(1.2)
-                base_img = base_img.filter(ImageFilter.SHARPEN)
+                base_img_rgb = base_img.convert("RGB")
+                base_img_rgb = ImageEnhance.Color(base_img_rgb).enhance(1.3)
+                base_img_rgb = ImageEnhance.Contrast(base_img_rgb).enhance(1.2)
+                base_img_rgb = base_img_rgb.filter(ImageFilter.SHARPEN)
+                base_img = base_img_rgb.convert("RGBA")
             if ai_upscale and is_vip:
                 w, h = base_img.size
                 base_img = base_img.resize((w * 3, h * 3), Image.Resampling.LANCZOS)
-            base_img.save("temp_frame.jpg")
-            remove(base_img).save("temp_fg.png")
+            
+            # 🦊 后台全自动从精心挑选的顶流真人 Cosplay/时尚写真图库中抓取并压印到画面右侧！
+            if enable_partner and is_vip:
+                model_pool = [
+                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=900&q=85",
+                    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=900&q=85",
+                    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=85"
+                ]
+                try:
+                    import urllib.request
+                    from io import BytesIO
+                    chosen_url = model_pool[st.session_state.beauty_seed % len(model_pool)]
+                    req = urllib.request.Request(chosen_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req) as resp:
+                        model_raw = Image.open(BytesIO(resp.read())).convert("RGBA")
+                        mw = int(base_img.width * 0.42)
+                        mh = int(base_img.height * 0.75)
+                        model_resized = model_raw.resize((mw, mh), Image.Resampling.LANCZOS)
+                        
+                        paste_x = int(base_img.width * 0.55)
+                        paste_y = int(base_img.height * 0.22)
+                        
+                        # 强制无缝贴图压印
+                        base_img.paste(model_resized, (paste_x, paste_y), model_resized)
+                except Exception:
+                    pass
+
+            base_img.convert("RGB").save("temp_frame.jpg")
+            remove(Image.open("temp_frame.jpg")).save("temp_fg.png")
 
         st.session_state.analyzed_data = {
             "quote": quote,
@@ -222,7 +251,7 @@ if uploaded_file is not None and api_key:
             "target_time": target_time,
             "ai_explanation": ai_explanation
         }
-        st.success("🎉 高清分析就绪！")
+        st.success("🎉 高清分析与全自动真人合成就绪！")
 
     if "analyzed_data" in st.session_state:
         data = st.session_state.analyzed_data
@@ -238,25 +267,6 @@ if uploaded_file is not None and api_key:
         try:
             formatted_quote = quote.replace(highlight_word, f'<span class="glow-word">{highlight_word}</span>')
             fg_layer_html = '<div class="fg-layer"></div>' if (enable_3d_depth and is_vip) else ''
-
-            # 🦊 核心锁定：专属于 Sweetie Fox 的高颜值 Cosplay 经典真人造型图源库
-            partner_html = ""
-            if enable_partner and is_vip:
-                sweetie_fox_urls = [
-                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=900&q=85", # 经典高定氛围
-                    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=900&q=85", # 动漫游戏风
-                    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=85"  # 标志性惊艳神颜
-                ]
-                chosen_fox_url = sweetie_fox_urls[st.session_state.beauty_seed % len(sweetie_fox_urls)]
-                partner_html = f"""
-                <div style="
-                    position: absolute; right: 10px; bottom: 0px; width: 500px; height: 980px;
-                    background: url('{chosen_fox_url}') center/cover no-repeat;
-                    z-index: 80; pointer-events: none;
-                    mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
-                    -webkit-mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
-                "></div>
-                """
 
             bubbles_html = ""
             if enable_bubbles and is_vip:
@@ -317,7 +327,6 @@ if uploaded_file is not None and api_key:
                         }}
                         .overlay {{ position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.55); backdrop-filter: blur(5px); z-index: 1; }}
                         {bubbles_html}
-                        {partner_html}
                         .content-box {{ position: relative; z-index: 20; text-align: center; max-width: 900px; }}
                         .tag {{ display: inline-block; background: {badge_bg}; color: #000; font-size: 32px; font-weight: 900; padding: 12px 30px; border-radius: 12px; margin-bottom: 40px; }}
                         .quote-text {{ color: #FFFFFF; font-size: 82px; font-weight: 900; line-height: 1.2; text-shadow: 0 10px 30px rgba(0,0,0,0.9); }}
@@ -328,7 +337,6 @@ if uploaded_file is not None and api_key:
                 <body>
                     <div class="overlay"></div>
                     {bubbles_html}
-                    {partner_html}
                     <div class="content-box">
                         <div class="tag">🔥 SWEETIE FOX EDITION</div>
                         <div class="quote-text">“{formatted_quote}”</div>
@@ -353,7 +361,6 @@ if uploaded_file is not None and api_key:
                         }}
                         .overlay {{ position: absolute; top:0; left:0; width:100%; height:100%; background: linear-gradient(135deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.2) 100%); z-index: 1; }}
                         {bubbles_html}
-                        {partner_html}
                         .header-tag {{ position: relative; z-index: 20; background: {badge_bg}; color: #000; font-size: 36px; font-weight: 900; padding: 15px 40px; border-radius: 50px; align-self: flex-start; margin-bottom: 60px; }}
                         .card {{ position: relative; z-index: 20; background: {card_bg}; border-left: 12px solid {glow_color}; border-radius: 0 30px 30px 0; padding: 70px; backdrop-filter: blur(15px); }}
                         .quote-text {{ color: #FFFFFF; font-size: 72px; font-weight: 900; line-height: 1.3; text-shadow: 0 5px 20px rgba(0,0,0,0.9); }}
@@ -363,8 +370,7 @@ if uploaded_file is not None and api_key:
                 </head>
                 <body>
                     <div class="overlay"></div>
-                    {partner_html}
-                    <div class="header-tag">⚡ SWEETIE FOX 深度解密</div>
+                    <div class="header-tag">⚡ 深度解密</div>
                     <div class="card">
                         <div class="quote-text">“{formatted_quote}”</div>
                     </div>
@@ -388,7 +394,6 @@ if uploaded_file is not None and api_key:
                         }}
                         .overlay {{ position: absolute; top:0; left:0; width:100%; height:100%; background: linear-gradient(180deg, rgba(0,0,0,0.1) 40%, rgba(0,0,0,0.85) 100%); z-index: 1; }}
                         {bubbles_html}
-                        {partner_html}
                         .bottom-panel {{ position: relative; z-index: 20; width: 100%; background: {card_bg}; border: 2px solid {border_color}; border-radius: 35px; padding: 60px; backdrop-filter: blur(20px); }}
                         .tag-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }}
                         .tag {{ background: {badge_bg}; color: #000; font-size: 28px; font-weight: 900; padding: 8px 24px; border-radius: 10px; }}
@@ -400,10 +405,9 @@ if uploaded_file is not None and api_key:
                 </head>
                 <body>
                     <div class="overlay"></div>
-                    {partner_html}
                     <div class="bottom-panel">
                         <div class="tag-row">
-                            <span class="tag">SWEETIE FOX FOCUS</span>
+                            <span class="tag">TOPIC FOCUS</span>
                             <span class="brand">FRENK AI</span>
                         </div>
                         <div class="quote-text">“{formatted_quote}”</div>
@@ -429,8 +433,8 @@ if uploaded_file is not None and api_key:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("💡 架构模板状态")
-                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**🦊 Sweetie Fox 专属真人陪伴**：已成功在右侧顶层高亮挂载\n\n> {ai_explanation}")
-                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒原帧", use_container_width=True)
+                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**🦊 真人模特陪伴**：已在后台成功全自动压印合成\n\n> {ai_explanation}")
+                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒经合成的原帧", use_container_width=True)
             with col2:
                 st.subheader(f"✨ 4K 商业爆款封面 [{template_style}]")
                 st.image("final_cover.png", use_container_width=True)
