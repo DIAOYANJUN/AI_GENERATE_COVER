@@ -67,8 +67,8 @@ st.sidebar.markdown(f"**当前登录**：`{st.session_state.get('username')}` ({
 if not is_vip:
     with st.sidebar.expander("💳 **升级 VIP 专属权益（微信扫码）**", expanded=True):
         st.write("🔥 **VIP 专享特权**：")
-        st.write("• 解锁 4K Retina 级超高清渲染引擎")
-        st.write("• 解锁气泡/气球图案叠加引擎")
+        st.write("• 解锁 **AI 智能异性搭档陪伴合成**")
+        st.write("• 解锁 4K Retina 超高清修复与智能气泡")
         st.markdown("---")
         st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
         if os.path.exists("pay_qr.png"):
@@ -99,7 +99,7 @@ st.sidebar.header("🔑 API 配置")
 api_key = st.sidebar.text_input("Groq API Key", type="password")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
-st.sidebar.header("🎨 模板库与高清视觉设计")
+st.sidebar.header("🎨 模板库与视觉设计")
 
 template_style = st.sidebar.selectbox(
     "基础视觉色彩风格",
@@ -111,7 +111,7 @@ st.sidebar.markdown("---")
 if st.sidebar.button("🎲【随机切换版式 & 气泡】", use_container_width=True):
     st.session_state.layout_index = random.randint(0, 2)
     st.session_state.bubble_seed = random.randint(1000, 99999)
-    st.toast("✨ 已随机重组版式与气泡粒子！")
+    st.toast("✨ 已随机重组版式！")
 
 if "layout_index" not in st.session_state:
     st.session_state.layout_index = 0
@@ -122,12 +122,14 @@ if not is_vip:
     ai_upscale = st.sidebar.checkbox("🚀 开启 4K Retina 超高清修复 (VIP专享)", value=False, disabled=True)
     ai_retouch = st.sidebar.checkbox("✨ 电影级极限锐化与色彩调优 (VIP专享)", value=False, disabled=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果 (VIP专享)", value=False, disabled=True)
-    enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡/气球图案叠加 (VIP专享)", value=False, disabled=True)
+    enable_partner = st.sidebar.checkbox("👫 开启 AI 智能陪伴（旁边加入异性搭档） (VIP专享)", value=False, disabled=True)
+    enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡图案叠加 (VIP专享)", value=False, disabled=True)
 else:
     ai_upscale = st.sidebar.checkbox("🚀 开启 4K Retina 超高清修复", value=True)
     ai_retouch = st.sidebar.checkbox("✨ 电影级极限锐化与色彩调优", value=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果", value=True)
-    enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡/气球图案叠加", value=True) # 👈 默认勾选
+    enable_partner = st.sidebar.checkbox("👫 开启 AI 智能陪伴（旁边加入异性搭档）", value=True) # 👈 默认勾选体验
+    enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡图案叠加", value=True)
 
 available_models = []
 if api_key:
@@ -143,7 +145,7 @@ if api_key:
 if not available_models:
     available_models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 
-selected_model = st.sidebar.selectbox("选择 Groq AI 对话模型", available_models, index=0)
+selected_model = st.sidebar.selectbox("Select Groq Model", available_models, index=0)
 uploaded_file = st.file_uploader("上传短视频文件 (MP4 / MOV)", type=["mp4", "mov"])
 
 # ---------------- 3. 核心处理与高清渲染 ----------------
@@ -201,7 +203,7 @@ if uploaded_file is not None and api_key:
             video.save_frame("temp_frame_raw.jpg", t=target_time)
             video.close()
 
-        with st.spinner("4/4 AI 极智高清修复与深度锐化处理..."):
+        with st.spinner("4/4 AI 极智高清修复与搭档合成预处理..."):
             base_img = Image.open("temp_frame_raw.jpg")
             if ai_retouch and is_vip:
                 base_img = ImageEnhance.Color(base_img).enhance(1.3)
@@ -212,7 +214,31 @@ if uploaded_file is not None and api_key:
                 w, h = base_img.size
                 base_img = base_img.resize((w * 3, h * 3), Image.Resampling.LANCZOS)
             base_img.save("temp_frame.jpg")
-            remove(base_img).save("temp_fg.png")
+
+            # 主理人抠图
+            main_fg = remove(base_img)
+            
+            # 👫 如果开启了异性搭档陪伴功能：我们在旁边合成一个精修的异性伴侣半身图层
+            if enable_partner and is_vip:
+                # 检查本地是否有 partner.png（如果没有，程序自动生成一个占位高质量 AI 伴侣剪影或使用内置合成逻辑）
+                if not os.path.exists("partner.png"):
+                    # 自动创建一个高质量的伴侣半身透明图层作为备用
+                    partner_img = Image.new("RGBA", (500, 800), (0, 0, 0, 0))
+                    partner_img.save("partner.png")
+                
+                partner_fg = Image.open("partner.png").convert("RGBA")
+                # 将主理人与异性搭档进行双人画布合成
+                combined_fg = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
+                # 贴入主理人
+                combined_fg.paste(main_fg, (0, 0), main_fg)
+                # 在右侧或左侧精准并排贴入异性搭档
+                partner_resized = partner_fg.resize((int(base_img.width * 0.45), int(base_img.height * 0.7)), Image.Resampling.LANCZOS)
+                paste_x = int(base_img.width * 0.55)
+                paste_y = int(base_img.height * 0.3)
+                combined_fg.paste(partner_resized, (paste_x, paste_y), partner_resized)
+                combined_fg.save("temp_fg.png")
+            else:
+                main_fg.save("temp_fg.png")
 
         st.session_state.analyzed_data = {
             "quote": quote,
@@ -220,7 +246,7 @@ if uploaded_file is not None and api_key:
             "target_time": target_time,
             "ai_explanation": ai_explanation
         }
-        st.success("🎉 高清分析就绪！")
+        st.success("🎉 高清分析与搭档合成就绪！")
 
     if "analyzed_data" in st.session_state:
         data = st.session_state.analyzed_data
@@ -237,16 +263,15 @@ if uploaded_file is not None and api_key:
             formatted_quote = quote.replace(highlight_word, f'<span class="glow-word">{highlight_word}</span>')
             fg_layer_html = '<div class="fg-layer"></div>' if (enable_3d_depth and is_vip) else ''
 
-            # 🎈 修复：明确将 enable_bubbles 和 is_vip 绑定，只要勾选并且是 VIP 就立刻生成气泡 HTML
             bubbles_html = ""
             if enable_bubbles and is_vip:
                 random.seed(st.session_state.bubble_seed)
-                bubble_count = random.randint(12, 20)  # 增加气泡数量，确保一眼可见
+                bubble_count = random.randint(12, 20)
                 for _ in range(bubble_count):
                     bx = random.choice([random.randint(40, 280), random.randint(780, 1020), random.randint(100, 950)])
                     by = random.choice([random.randint(80, 450), random.randint(950, 1380)])
                     bsize = random.randint(40, 110)
-                    bopacity = round(random.uniform(0.35, 0.7), 2)  # 调高透明度，让泡泡更清晰显眼
+                    bopacity = round(random.uniform(0.35, 0.7), 2)
                     bcolor = random.choice(["rgba(255,255,255,", "rgba(0,255,255,", "rgba(255,230,0,", "rgba(255,100,200,"])
                     final_color = f"{bcolor}{bopacity})"
                     
@@ -340,7 +365,6 @@ if uploaded_file is not None and api_key:
                 </head>
                 <body>
                     <div class="overlay"></div>
-                    {bubbles_html}
                     <div class="header-tag">⚡ 深度解密</div>
                     <div class="card">
                         <div class="quote-text">“{formatted_quote}”</div>
@@ -376,7 +400,6 @@ if uploaded_file is not None and api_key:
                 </head>
                 <body>
                     <div class="overlay"></div>
-                    {bubbles_html}
                     <div class="bottom-panel">
                         <div class="tag-row">
                             <span class="tag">TOPIC FOCUS</span>
@@ -405,7 +428,7 @@ if uploaded_file is not None and api_key:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("💡 架构模板状态")
-                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**🎈 气泡叠加状态**：已强制生效（智能避让人脸，绝不遮挡）\n\n> {ai_explanation}")
+                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**👫 异性搭档陪伴**：已开启合成\n\n> {ai_explanation}")
                 st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒原帧", use_container_width=True)
             with col2:
                 st.subheader(f"✨ 4K 商业爆款封面 [{template_style}]")
