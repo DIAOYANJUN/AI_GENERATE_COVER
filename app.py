@@ -23,20 +23,19 @@ st.set_page_config(page_title="AI 金句爆款封面生成器", layout="wide", p
 
 st.title("🔥 AI 视频金句时间戳同步 & 华丽特效封面生成器")
 
-# 侧边栏 API 配置（支持动态切换模型）
+# 侧边栏 API 配置
 st.sidebar.header("🔑 API 配置")
 api_key = st.sidebar.text_input("Groq API Key", type="password", help="请在此处输入你的 Groq API Key")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
-# 模型下拉菜单：若遇到 404 报错直接在网页侧边栏切换模型即可
 model_choice = st.sidebar.selectbox(
     "选择 Groq AI 模型",
     [
-        "llama-3.1-8b-instant",       # 默认：全员可用，速度最快
-        "llama-3.1-70b-versatile",     # 高质量大模型
-        "llama3-8b-8192",              # 经典 Llama 3 8B
-        "llama3-70b-8192",             # 经典 Llama 3 70B
-        "mixtral-8x7b-32768"           # Mixtral 混合专家模型
+        "llama-3.1-8b-instant",       # 默认：极速可用
+        "llama-3.1-70b-versatile",     # 高质量模型
+        "llama3-8b-8192", 
+        "llama3-70b-8192", 
+        "mixtral-8x7b-32768"
     ],
     index=0
 )
@@ -80,7 +79,6 @@ if uploaded_file is not None and api_key:
                 }}
                 """
 
-                # 使用侧边栏选择的动态模型
                 response = client.chat.completions.create(
                     model=model_choice,
                     messages=[{"role": "user", "content": prompt}],
@@ -104,42 +102,11 @@ if uploaded_file is not None and api_key:
                     f'<span class="glow-word">{highlight_word}</span>'
                 )
 
-                html_template = f"""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <style>
-                        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-                        body {{
-                            width: 1080px; height: 1440px;
-                            background: url('temp_frame.jpg') center/cover no-repeat;
-                            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
-                            display: flex; flex-direction: column; justify-content: space-between;
-                            padding: 100px 70px;
-                            position: relative; overflow: hidden;
-                        }}
-                        .overlay {{
-                            position: absolute; top:0; left:0; width:100%; height:100%;
-                            background: linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.75) 100%);
-                            backdrop-filter: blur(12px) brightness(0.85);
-                            z-index: 1;
-                        }}
-                        .header {{ position: relative; z-index: 2; }}
-                        .tag {{
-                            display: inline-block;
-                            background: linear-gradient(90deg, #FFE600 0%, #FF9900 100%);
-                            color: #000; font-size: 38px; font-weight: 900;
-                            padding: 14px 36px; border-radius: 50px;
-                            box-shadow: 0 10px 30px rgba(255, 230, 0, 0.4);
-                        }}
-                        .card-container {{
-                            position: relative; z-index: 2;
-                            background: rgba(255, 255, 255, 0.07);
-                            border: 2px solid rgba(255, 255, 255, 0.18);
-                            border-radius: 40px; padding: 70px 50px;
-                            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
-                        }}
-                        .quote-text {{
-                            color: #FFFFFF; font-size: 76px; font-weight: 900;
-                            line-height: 1.3; letter-spacing: 3px;
-                            text-shadow: 0 5px 15px rgba(0,0,0
+                # 普通多行字符串（不用 f-string，绝不与 CSS 大括号冲突）
+                raw_html = """<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            width: 1080px; height:
