@@ -3,4 +3,5 @@ moviepy
 openai
 playwright
 opencv-python-headless
-pillow
+rembg
+onnxruntime
