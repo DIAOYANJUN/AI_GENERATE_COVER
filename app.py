@@ -8,18 +8,24 @@ from openai import OpenAI
 from rembg import remove
 from PIL import Image
 
-# ---------------- 0. 登录身份验证系统 ----------------
+# ---------------- 0. 用户系统与 VIP 权限配置 ----------------
 st.set_page_config(page_title="AI 商业级爆款封面生成器", layout="wide", page_icon="🎬")
 
-# 预设管理员/测试账号密码（你可以在此处自由修改）
-USER_CREDENTIALS = {
-    "admin": "123456",
-    "vipuser": "vip888"
+# 用户数据库：指定角色 (vip / free)
+USER_DATABASE = {
+    "admin": {"password": "123", "role": "vip"},
+    "free_user": {"password": "123", "role": "free"}
 }
+
+# 预设 VIP 激活码/兑换码（扫码支付后提供给用户的卡密）
+VIP_ACTIVATION_CODES = ["VIP666", "VIP888", "PRO2026"]
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+if "user_role" not in st.session_state:
+    st.session_state.user_role = "free"
 
+# 登录流程
 if not st.session_state.logged_in:
     st.title("🔐 AI 爆款封面生成器 - 用户登录")
     st.markdown("---")
@@ -28,14 +34,15 @@ if not st.session_state.logged_in:
     with col2:
         with st.form("login_form"):
             st.subheader("账号登录")
-            username = st.text_input("用户名", value="admin")
-            password = st.text_input("密码", type="password", value="123456")
+            username = st.text_input("用户名", value="free_user")
+            password = st.text_input("密码", type="password", value="123")
             submit = st.form_submit_button("🚀 立即登录")
             
             if submit:
-                if username in USER_CREDENTIALS and USER_CREDENTIALS[username] == password:
+                if username in USER_DATABASE and USER_DATABASE[username]["password"] == password:
                     st.session_state.logged_in = True
                     st.session_state.username = username
+                    st.session_state.user_role = USER_DATABASE[username]["role"]
                     st.success("✅ 登录成功！正在进入系统...")
                     st.rerun()
                 else:
@@ -54,13 +61,47 @@ def setup_playwright():
 setup_playwright()
 from playwright.sync_api import sync_playwright
 
-# ---------------- 2. 页面与配置初始化 ----------------
+# ---------------- 2. 页面与侧边栏 VIP 系统 ----------------
 st.title("✨ AI 视频金句时间戳同步 & 多风格商业封面生成器")
 
-# 侧边栏：账号信息与退出登录
-st.sidebar.markdown(f"👤 **当前登录**：`{st.session_state.get('username', 'User')}`")
+# 侧边栏：账号与 VIP 状态
+is_vip = st.session_state.user_role == "vip"
+role_badge = "👑 VIP 尊享会员" if is_vip else "👤 普通免费用户"
+st.sidebar.markdown(f"**当前登录**：`{st.session_state.get('username')}` ({role_badge})")
+
+# 充值 VIP 弹窗 / 展开栏
+if not is_vip:
+    with st.sidebar.expander("💳 **升级 VIP 专属权益**", expanded=True):
+        st.write("🔥 **VIP 专属特权**：")
+        st.write("• 解锁小红书爆款 👑 VIP 高对比度配色")
+        st.write("• 解锁 3D 人像景深穿插海报特效")
+        st.write("• 无限次导出 4K 超清图形")
+        
+        st.markdown("---")
+        st.markdown("##### 🟢 推荐使用微信支付 ￥19.9 开通 VIP")
+        
+        # 自动优先读取仓库中的微信二维码 pay_qr.png
+        if os.path.exists("pay_qr.png"):
+            st.image("pay_qr.png", caption="微信支付 (Frenk**君)", use_container_width=True)
+        else:
+            # 备用网络示例码（提醒用户上传 pay_qr.png）
+            st.warning("⚠️ 请将你的微信二维码重命名为 pay_qr.png 上传至 GitHub 仓库")
+            st.image("https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=WeChatPay", caption="微信支付", use_container_width=True)
+        
+        st.markdown("---")
+        # 激活码兑换
+        input_code = st.text_input("输入支付后获得的 VIP 激活码", key="redeem_code")
+        if st.button("🚀 立即兑换 VIP"):
+            if input_code.strip() in VIP_ACTIVATION_CODES:
+                st.session_state.user_role = "vip"
+                st.success("🎉 激活成功！已升至 VIP 会员！")
+                st.rerun()
+            else:
+                st.error("❌ 激活码无效或已被使用")
+
 if st.sidebar.button("🚪 退出登录"):
     st.session_state.logged_in = False
+    st.session_state.user_role = "free"
     st.rerun()
 
 st.sidebar.markdown("---")
@@ -70,7 +111,7 @@ st.sidebar.header("🔑 API 配置")
 api_key = st.sidebar.text_input("Groq API Key", type="password")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
-# ---------------- 侧边栏：封面视觉设计（带 VIP 标识） ----------------
+# 侧边栏：封面风格选择
 st.sidebar.header("🎨 封面视觉设计")
 
 template_style = st.sidebar.selectbox(
@@ -84,9 +125,13 @@ template_style = st.sidebar.selectbox(
     index=0
 )
 
-enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡/文字后置效果", value=True, help="使用 AI 抠图将文字穿插在人物身后，大幅提升立体感")
+# 非 VIP 限制 3D 效果
+if not is_vip:
+    enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡/文字后置效果 (VIP 专享)", value=False, disabled=True)
+else:
+    enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡/文字后置效果", value=True)
 
-# 动态获取对话模型
+# 动态获取模型
 available_models = []
 if api_key:
     try:
@@ -115,6 +160,11 @@ if uploaded_file is not None and api_key:
     st.video("temp_video.mp4")
 
     if st.button("🚀 一键生成所选风格封面"):
+        # VIP 风格权限拦截校验
+        if "VIP" in template_style and not is_vip:
+            st.error("🔒 该模板为 👑 VIP 独享功能！请在左侧侧边栏扫码支付升级会员后使用。")
+            st.stop()
+
         try:
             with st.spinner("1/5 正在剥离视频音频..."):
                 video = VideoFileClip("temp_video.mp4")
@@ -148,7 +198,6 @@ if uploaded_file is not None and api_key:
                     + '{"golden_quote": "金句原文", "start_time": 秒数(float), "highlight_word": "高亮词"}'
                 )
 
-                # 锁定 temperature=0.0 与 seed=42 确保输出固定
                 response = client.chat.completions.create(
                     model=selected_model,
                     messages=[
@@ -170,9 +219,9 @@ if uploaded_file is not None and api_key:
                 video.save_frame("temp_frame.jpg", t=target_time)
                 video.close()
 
-            # 抠图处理逻辑 (AI 生成前景蒙版)
+            # 抠图处理逻辑
             fg_layer_html = ""
-            if enable_3d_depth:
+            if enable_3d_depth and is_vip:
                 with st.spinner("4/5 正在进行 AI 人像扣图，合成 3D 景深穿插图层..."):
                     input_img = Image.open("temp_frame.jpg")
                     output_img = remove(input_img)
@@ -188,7 +237,7 @@ if uploaded_file is not None and api_key:
                     f'<span class="glow-word">{highlight_word}</span>'
                 )
 
-                # ---------------- 根据所选风格配置 CSS 样式 ----------------
+                # 样式与字体定义
                 if "Cyber" in template_style:
                     font_import = "@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@800;900&family=Noto+Sans+SC:wght@900&display=swap');"
                     font_family = "'Orbitron', 'Noto Sans SC', sans-serif"
@@ -198,7 +247,6 @@ if uploaded_file is not None and api_key:
                     border_color = "rgba(0, 255, 255, 0.4)"
                     badge_text_color = "#000"
                 elif "Yellow" in template_style or "VIP" in template_style:
-                    # 小红书爆款 (👑 VIP)
                     font_import = "@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Noto+Sans+SC:wght@900&display=swap');"
                     font_family = "'Montserrat', 'Noto Sans SC', sans-serif"
                     glow_color = "#FFE600"
