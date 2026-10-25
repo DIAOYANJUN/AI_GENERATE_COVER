@@ -61,14 +61,14 @@ def setup_playwright():
 setup_playwright()
 from playwright.sync_api import sync_playwright
 
-# ---------------- 2. 页面与侧边栏支付系统 ----------------
+# ---------------- 2. 页面与侧边栏配置 ----------------
 st.title("✨ AI 视频金句时间戳同步 & 智能商业封面生成器")
 
 is_vip = st.session_state.user_role == "vip"
 role_badge = "👑 VIP 尊享会员" if is_vip else "👤 普通免费用户"
 st.sidebar.markdown(f"**当前登录**：`{st.session_state.get('username')}` ({role_badge})")
 
-# 非 VIP 用户展示微信收款码与实时支付检测
+# 非 VIP 用户展示微信收款码
 if not is_vip:
     with st.sidebar.expander("💳 **升级 VIP 专属权益（微信扫码）**", expanded=True):
         st.write("🔥 **VIP 专享特权**：")
@@ -90,30 +90,20 @@ if not is_vip:
         if st.button("🔄 检查是否已扫码支付"):
             with st.spinner("正在向支付网关查询扫码及到账状态..."):
                 time.sleep(1)
-                current_status = st.session_state.payment_status
-                
-                if current_status == "SUCCESS":
+                if st.session_state.payment_status == "SUCCESS":
                     st.session_state.user_role = "vip"
                     st.success("🎉【支付成功】已检测到付款！VIP 权限已自动开通！")
                     st.balloons()
                     time.sleep(1.5)
                     st.rerun()
-                elif current_status == "FAIL":
-                    st.error("❌【支付失败/已取消】未检测到有效付款，请重新扫码。")
                 else:
-                    st.warning("⏳【未完成支付】尚未检测到扫码付款，请在微信完成支付后再次点击检查。")
+                    st.warning("⏳【未完成支付】尚未检测到扫码付款。")
 
         st.markdown("---")
-        st.markdown("##### 🧪 演示调试区（模拟用户手机行为）")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("模拟已付款"):
-                st.session_state.payment_status = "SUCCESS"
-                st.toast("已模拟：用户在手机完成微信支付！")
-        with col_b:
-            if st.button("模拟未付款"):
-                st.session_state.payment_status = "NOTPAY"
-                st.toast("已模拟：未检测到付款。")
+        st.markdown("##### 🧪 调试区")
+        if st.button("模拟已付款"):
+            st.session_state.payment_status = "SUCCESS"
+            st.toast("已模拟支付成功！")
 
 if st.sidebar.button("🚪 退出登录"):
     st.session_state.logged_in = False
@@ -123,13 +113,11 @@ if st.sidebar.button("🚪 退出登录"):
 
 st.sidebar.markdown("---")
 
-# 侧边栏：API 配置
 st.sidebar.header("🔑 API 配置")
 api_key = st.sidebar.text_input("Groq API Key", type="password")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
-# 侧边栏：封面风格选择
-st.sidebar.header("🎨 封面视觉设计")
+st.sidebar.header("🎨 封面视觉设计（支持实时响应）")
 
 template_style = st.sidebar.selectbox(
     "选择封面视觉风格",
@@ -142,6 +130,7 @@ template_style = st.sidebar.selectbox(
     index=0
 )
 
+# 💡 将这两个控件设为实时响应控件（不放在生成按钮内部，只要变动就会触发页面重跑渲染）
 if not is_vip:
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡/文字后置效果 (VIP 专享)", value=False, disabled=True)
 else:
@@ -166,225 +155,239 @@ selected_model = st.sidebar.selectbox("选择 Groq AI 对话模型", available_m
 
 uploaded_file = st.file_uploader("上传短视频文件 (MP4 / MOV)", type=["mp4", "mov"])
 
-# ---------------- 3. 主流程处理逻辑 ----------------
+# ---------------- 3. 会话状态缓存与主渲染函数 ----------------
+# 如果已经分析过视频并生成了基础数据，将其存入 st.session_state 避免重复调用耗时的 Whisper 和 LLM
 if uploaded_file is not None and api_key:
-    client = OpenAI(api_key=api_key, base_url=base_url)
+    # 仅当上传新视频或尚未解析时才运行重型任务
+    if "analyzed_data" not in st.session_state or st.session_state.get("last_file") != uploaded_file.name:
+        with open("temp_video.mp4", "wb") as f:
+            f.write(uploaded_file.read())
+        st.session_state.last_file = uploaded_file.name
 
-    with open("temp_video.mp4", "wb") as f:
-        f.write(uploaded_file.read())
+        client = OpenAI(api_key=api_key, base_url=base_url)
+        
+        with st.spinner("1/4 正在剥离视频音频..."):
+            video = VideoFileClip("temp_video.mp4")
+            duration = video.duration
+            video.audio.write_audiofile("temp_audio.mp3", logger=None)
 
-    st.video("temp_video.mp4")
+        with st.spinner("2/4 使用 Groq Whisper 提取真实语音时间戳..."):
+            with open("temp_audio.mp3", "rb") as audio_file:
+                transcription = client.audio.transcriptions.create(
+                    file=("temp_audio.mp3", audio_file.read()),
+                    model="whisper-large-v3-turbo",
+                    response_format="verbose_json",
+                    timestamp_granularities=["segment"]
+                )
+            
+            raw_segments = getattr(transcription, "segments", [])
+            real_segments = []
+            for seg in raw_segments:
+                text_val = seg.get("text", "") if isinstance(seg, dict) else getattr(seg, "text", "")
+                start_val = seg.get("start", 0) if isinstance(seg, dict) else getattr(seg, "start", 0)
+                real_segments.append({"start": round(start_val, 2), "text": text_val.strip()})
 
-    if st.button("🚀 一键生成所选风格封面"):
+            if not real_segments:
+                real_segments = [{"start": 0.5, "text": "Pro Quality Video Content"}]
+
+        with st.spinner("3/4 大模型深度拆解，挑选最优封面帧..."):
+            prompt = (
+                "分析以下视频字幕，挑选出最震撼、最能拉满点击率的【唯一 1 句金句】，并匹配其在视频中的开始时间秒数。\n"
+                + f"字幕数据：{json.dumps(real_segments, ensure_ascii=False)}\n\n"
+                + "请严格只返回以下 JSON 格式：\n"
+                + "{\n"
+                + '    "golden_quote": "金句原文",\n'
+                + '    "start_time": 开始秒数(float),\n'
+                + '    "highlight_word": "核心高亮词",\n'
+                + '    "explanation": "详细解释为什么选择这句话（15-30字）"\n'
+                + "}"
+            )
+
+            response = client.chat.completions.create(
+                model=selected_model,
+                messages=[
+                    {"role": "system", "content": "You are a professional social media title designer that outputs strict raw JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.0,
+                seed=42,
+                max_tokens=1000
+            )
+
+            res = json.loads(response.choices[0].message.content)
+            quote = res.get("golden_quote", real_segments[0]["text"])
+            target_time = float(res.get("start_time", real_segments[0]["start"]))
+            highlight_word = res.get("highlight_word", quote.split()[0] if quote.split() else quote)
+            ai_explanation = res.get("explanation", "精选全片高能痛点，完美匹配视频吸睛瞬间。")
+
+            target_time = min(max(0.5, target_time), duration - 0.5)
+
+            video.save_frame("temp_frame.jpg", t=target_time)
+            video.close()
+
+        # 提前做一次 AI 抠图备用
+        with st.spinner("4/4 正在预处理 AI 人像扣图层..."):
+            input_img = Image.open("temp_frame.jpg")
+            output_img = remove(input_img)
+            output_img.save("temp_fg.png")
+
+        # 将解析结果存入内存
+        st.session_state.analyzed_data = {
+            "quote": quote,
+            "highlight_word": highlight_word,
+            "target_time": target_time,
+            "ai_explanation": ai_explanation,
+            "duration": duration
+        }
+        st.success("🎉 视频分析与抠图准备就绪！现在你可以**实时勾选后置效果或切换风格**查看变化。")
+
+    # 如果已经解析完毕，每次侧边栏勾选变化时，直接执行极速渲染（无需重新上传和调用 AI 分析）
+    if "analyzed_data" in st.session_state:
+        data = st.session_state.analyzed_data
+        quote = data["quote"]
+        highlight_word = data["highlight_word"]
+        target_time = data["target_time"]
+        ai_explanation = data["ai_explanation"]
+
         if "VIP" in template_style and not is_vip:
-            st.error("🔒 该模板为 👑 VIP 独享功能！请先在左侧侧边栏扫码支付，并通过“检查是否已扫码支付”完成验证。")
+            st.error("🔒 该模板为 👑 VIP 独享功能！请先在左侧侧边栏扫码支付完成验证。")
             st.stop()
 
         try:
-            with st.spinner("1/5 正在剥离视频音频..."):
-                video = VideoFileClip("temp_video.mp4")
-                duration = video.duration
-                video.audio.write_audiofile("temp_audio.mp3", logger=None)
+            # 动态控制抠图图层是否加载
+            fg_layer_html = '<div class="fg-layer"></div>' if (enable_3d_depth and is_vip) else ''
 
-            with st.spinner("2/5 使用 Groq Whisper 提取真实语音时间戳..."):
-                with open("temp_audio.mp3", "rb") as audio_file:
-                    transcription = client.audio.transcriptions.create(
-                        file=("temp_audio.mp3", audio_file.read()),
-                        model="whisper-large-v3-turbo",
-                        response_format="verbose_json",
-                        timestamp_granularities=["segment"]
-                    )
-                
-                raw_segments = getattr(transcription, "segments", [])
-                real_segments = []
-                for seg in raw_segments:
-                    text_val = seg.get("text", "") if isinstance(seg, dict) else getattr(seg, "text", "")
-                    start_val = seg.get("start", 0) if isinstance(seg, dict) else getattr(seg, "start", 0)
-                    real_segments.append({"start": round(start_val, 2), "text": text_val.strip()})
+            formatted_quote = quote.replace(
+                highlight_word, 
+                f'<span class="glow-word">{highlight_word}</span>'
+            )
 
-                if not real_segments:
-                    real_segments = [{"start": 0.5, "text": "Pro Quality Video Content"}]
-
-            with st.spinner("3/5 大模型深度拆解，挑选唯一最优封面帧并生成理由..."):
-                prompt = (
-                    "分析以下视频字幕，挑选出最震撼、最能拉满点击率的【唯一 1 句金句】，并匹配其在视频中的开始时间秒数。\n"
-                    + f"字幕数据：{json.dumps(real_segments, ensure_ascii=False)}\n\n"
-                    + "请严格只返回以下 JSON 格式（不要包含任何多余 markdown 标记或文字）：\n"
-                    + "{\n"
-                    + '    "golden_quote": "金句原文",\n'
-                    + '    "start_time": 开始秒数(float),\n'
-                    + '    "highlight_word": "核心高亮词",\n'
-                    + '    "explanation": "详细解释为什么选择这句话以及这个时间点的画面（15-30字）"\n'
-                    + "}"
-                )
-
-                response = client.chat.completions.create(
-                    model=selected_model,
-                    messages=[
-                        {"role": "system", "content": "You are a professional social media title designer that outputs strict raw JSON."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=0.0,
-                    seed=42
-                )
-
-                res = json.loads(response.choices[0].message.content)
-                quote = res.get("golden_quote", real_segments[0]["text"])
-                target_time = float(res.get("start_time", real_segments[0]["start"]))
-                highlight_word = res.get("highlight_word", quote.split()[0] if quote.split() else quote)
-                ai_explanation = res.get("explanation", "精选全片高能痛点，完美匹配视频吸睛瞬间。")
-
-                target_time = min(max(0.5, target_time), duration - 0.5)
-
-                video.save_frame("temp_frame.jpg", t=target_time)
-                video.close()
-
-            fg_layer_html = ""
-            if enable_3d_depth and is_vip:
-                with st.spinner("4/5 正在进行 AI 人像扣图，合成 3D 景深穿插图层..."):
-                    input_img = Image.open("temp_frame.jpg")
-                    output_img = remove(input_img)
-                    output_img.save("temp_fg.png")
-                    fg_layer_html = '<div class="fg-layer"></div>'
+            if "Cyber" in template_style:
+                font_import = "@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@800;900&family=Noto+Sans+SC:wght@900&display=swap');"
+                font_family = "'Orbitron', 'Noto Sans SC', sans-serif"
+                glow_color = "#00FFFF"
+                badge_bg = "linear-gradient(90deg, #00F2FE 0%, #4FACFE 100%)"
+                card_bg = "rgba(10, 25, 47, 0.55)"
+                border_color = "rgba(0, 255, 255, 0.4)"
+                badge_text_color = "#000"
+            elif "Yellow" in template_style or "VIP" in template_style:
+                font_import = "@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Noto+Sans+SC:wght@900&display=swap');"
+                font_family = "'Montserrat', 'Noto Sans SC', sans-serif"
+                glow_color = "#FFE600"
+                badge_bg = "#FFE600"
+                card_bg = "rgba(0, 0, 0, 0.65)"
+                border_color = "rgba(255, 230, 0, 0.5)"
+                badge_text_color = "#000"
+            elif "Magazine" in template_style:
+                font_import = "@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@800;900&family=Noto+Serif+SC:wght@900&display=swap');"
+                font_family = "'Cinzel', 'Noto Serif SC', serif"
+                glow_color = "#E6C200"
+                badge_bg = "#FFFFFF"
+                card_bg = "rgba(255, 255, 255, 0.12)"
+                border_color = "rgba(255, 255, 255, 0.4)"
+                badge_text_color = "#000"
             else:
-                with st.spinner("4/5 跳过抠图，准备普通渲染..."):
-                    pass
+                font_import = "@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Noto+Sans+SC:wght@900&display=swap');"
+                font_family = "'Montserrat', 'Noto Sans SC', sans-serif"
+                glow_color = "#FFE600"
+                badge_bg = "linear-gradient(90deg, #FFE600 0%, #FF9900 100%)"
+                card_bg = "rgba(18, 18, 18, 0.45)"
+                border_color = "rgba(255, 255, 255, 0.25)"
+                badge_text_color = "#000"
 
-            with st.spinner(f"5/5 渲染 [{template_style}] 风格 4K 商业网页封面..."):
-                formatted_quote = quote.replace(
-                    highlight_word, 
-                    f'<span class="glow-word">{highlight_word}</span>'
-                )
+            html_template = (
+                "<!DOCTYPE html>\n"
+                "<html>\n"
+                "<head>\n"
+                "    <style>\n"
+                "        " + font_import + "\n"
+                "        * { box-sizing: border-box; margin: 0; padding: 0; }\n"
+                "        body {\n"
+                "            width: 1080px; height: 1440px;\n"
+                "            background: url('temp_frame.jpg') center/cover no-repeat;\n"
+                "            font-family: " + font_family + ";\n"
+                "            display: flex; flex-direction: column; justify-content: space-between;\n"
+                "            padding: 100px 70px;\n"
+                "            position: relative; overflow: hidden;\n"
+                "        }\n"
+                "        .overlay {\n"
+                "            position: absolute; top:0; left:0; width:100%; height:100%;\n"
+                "            background: linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.75) 100%);\n"
+                "            backdrop-filter: blur(4px);\n"
+                "            z-index: 1;\n"
+                "        }\n"
+                "        .header { position: relative; z-index: 2; }\n"
+                "        .tag {\n"
+                "            display: inline-block;\n"
+                "            background: " + badge_bg + ";\n"
+                "            color: " + badge_text_color + "; font-size: 36px; font-weight: 900;\n"
+                "            padding: 14px 36px; border-radius: 50px;\n"
+                "            box-shadow: 0 10px 25px rgba(0,0,0,0.4);\n"
+                "        }\n"
+                "        .card-container {\n"
+                "            position: relative; z-index: 2;\n"
+                "            background: " + card_bg + ";\n"
+                "            border: 2px solid " + border_color + ";\n"
+                "            border-radius: 40px; padding: 65px 50px;\n"
+                "            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6);\n"
+                "            backdrop-filter: blur(14px);\n"
+                "        }\n"
+                "        .quote-text {\n"
+                "            color: #FFFFFF; font-size: 76px; font-weight: 900;\n"
+                "            line-height: 1.25; letter-spacing: -1px;\n"
+                "            text-shadow: 0 5px 20px rgba(0,0,0,0.9);\n"
+                "        }\n"
+                "        .glow-word {\n"
+                "            color: " + glow_color + ";\n"
+                "            text-shadow: 0 0 25px " + glow_color + ";\n"
+                "            display: inline-block; padding: 0 8px;\n"
+                "        }\n"
+                "        .fg-layer {\n"
+                "            position: absolute; top:0; left:0; width:100%; height:100%;\n"
+                "            background: url('temp_fg.png') center/cover no-repeat;\n"
+                "            z-index: 3;\n"
+                "            pointer-events: none;\n"
+                "        }\n"
+                "        .footer {\n"
+                "            position: relative; z-index: 4;\n"
+                "            display: flex; justify-content: flex-end; align-items: center;\n"
+                "            border-top: 1px solid rgba(255, 255, 255, 0.2); padding-top: 35px;\n"
+                "        }\n"
+                "        .badge {\n"
+                "            background: rgba(0,0,0,0.65); padding: 10px 28px;\n"
+                "            border-radius: 14px; color: " + glow_color + "; font-size: 32px; font-weight: 900;\n"
+                "            border: 1px solid rgba(255,255,255,0.2);\n"
+                "        }\n"
+                "    </style>\n"
+                "</head>\n"
+                "<body>\n"
+                '    <div class="overlay"></div>\n'
+                '    <div class="header"><div class="tag">How can we</div></div>\n'
+                '    <div class="card-container"><div class="quote-text">“' + str(formatted_quote) + '”</div></div>\n'
+                + fg_layer_html + "\n"
+                '    <div class="footer"><span class="badge">NICE</span></div>\n'
+                "</body>\n"
+                "</html>"
+            )
 
-                if "Cyber" in template_style:
-                    font_import = "@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@800;900&family=Noto+Sans+SC:wght@900&display=swap');"
-                    font_family = "'Orbitron', 'Noto Sans SC', sans-serif"
-                    glow_color = "#00FFFF"
-                    badge_bg = "linear-gradient(90deg, #00F2FE 0%, #4FACFE 100%)"
-                    card_bg = "rgba(10, 25, 47, 0.55)"
-                    border_color = "rgba(0, 255, 255, 0.4)"
-                    badge_text_color = "#000"
-                elif "Yellow" in template_style or "VIP" in template_style:
-                    font_import = "@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Noto+Sans+SC:wght@900&display=swap');"
-                    font_family = "'Montserrat', 'Noto Sans SC', sans-serif"
-                    glow_color = "#FFE600"
-                    badge_bg = "#FFE600"
-                    card_bg = "rgba(0, 0, 0, 0.65)"
-                    border_color = "rgba(255, 230, 0, 0.5)"
-                    badge_text_color = "#000"
-                elif "Magazine" in template_style:
-                    font_import = "@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@800;900&family=Noto+Serif+SC:wght@900&display=swap');"
-                    font_family = "'Cinzel', 'Noto Serif SC', serif"
-                    glow_color = "#E6C200"
-                    badge_bg = "#FFFFFF"
-                    card_bg = "rgba(255, 255, 255, 0.12)"
-                    border_color = "rgba(255, 255, 255, 0.4)"
-                    badge_text_color = "#000"
-                else:
-                    font_import = "@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Noto+Sans+SC:wght@900&display=swap');"
-                    font_family = "'Montserrat', 'Noto Sans SC', sans-serif"
-                    glow_color = "#FFE600"
-                    badge_bg = "linear-gradient(90deg, #FFE600 0%, #FF9900 100%)"
-                    card_bg = "rgba(18, 18, 18, 0.45)"
-                    border_color = "rgba(255, 255, 255, 0.25)"
-                    badge_text_color = "#000"
+            with open("render_template.html", "w", encoding="utf-8") as f:
+                f.write(html_template)
 
-                html_template = (
-                    "<!DOCTYPE html>\n"
-                    "<html>\n"
-                    "<head>\n"
-                    "    <style>\n"
-                    "        " + font_import + "\n"
-                    "        * { box-sizing: border-box; margin: 0; padding: 0; }\n"
-                    "        body {\n"
-                    "            width: 1080px; height: 1440px;\n"
-                    "            background: url('temp_frame.jpg') center/cover no-repeat;\n"
-                    "            font-family: " + font_family + ";\n"
-                    "            display: flex; flex-direction: column; justify-content: space-between;\n"
-                    "            padding: 100px 70px;\n"
-                    "            position: relative; overflow: hidden;\n"
-                    "        }\n"
-                    "        .overlay {\n"
-                    "            position: absolute; top:0; left:0; width:100%; height:100%;\n"
-                    "            background: linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.75) 100%);\n"
-                    "            backdrop-filter: blur(4px);\n"
-                    "            z-index: 1;\n"
-                    "        }\n"
-                    "        .header { position: relative; z-index: 2; }\n"
-                    "        .tag {\n"
-                    "            display: inline-block;\n"
-                    "            background: " + badge_bg + ";\n"
-                    "            color: " + badge_text_color + "; font-size: 36px; font-weight: 900;\n"
-                    "            padding: 14px 36px; border-radius: 50px;\n"
-                    "            box-shadow: 0 10px 25px rgba(0,0,0,0.4);\n"
-                    "        }\n"
-                    "        .card-container {\n"
-                    "            position: relative; z-index: 2;\n"
-                    "            background: " + card_bg + ";\n"
-                    "            border: 2px solid " + border_color + ";\n"
-                    "            border-radius: 40px; padding: 65px 50px;\n"
-                    "            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6);\n"
-                    "            backdrop-filter: blur(14px);\n"
-                    "        }\n"
-                    "        .quote-text {\n"
-                    "            color: #FFFFFF; font-size: 76px; font-weight: 900;\n"
-                    "            line-height: 1.25; letter-spacing: -1px;\n"
-                    "            text-shadow: 0 5px 20px rgba(0,0,0,0.9);\n"
-                    "        }\n"
-                    "        .glow-word {\n"
-                    "            color: " + glow_color + ";\n"
-                    "            text-shadow: 0 0 25px " + glow_color + ";\n"
-                    "            display: inline-block; padding: 0 8px;\n"
-                    "        }\n"
-                    "        .fg-layer {\n"
-                    "            position: absolute; top:0; left:0; width:100%; height:100%;\n"
-                    "            background: url('temp_fg.png') center/cover no-repeat;\n"
-                    "            z-index: 3;\n"
-                    "            pointer-events: none;\n"
-                    "        }\n"
-                    "        .footer {\n"
-                    "            position: relative; z-index: 4;\n"
-                    "            display: flex; justify-content: flex-end; align-items: center;\n"
-                    "            border-top: 1px solid rgba(255, 255, 255, 0.2); padding-top: 35px;\n"
-                    "        }\n"
-                    "        .badge {\n"
-                    "            background: rgba(0,0,0,0.65); padding: 10px 28px;\n"
-                    "            border-radius: 14px; color: " + glow_color + "; font-size: 32px; font-weight: 900;\n"
-                    "            border: 1px solid rgba(255,255,255,0.2);\n"
-                    "        }\n"
-                    "    </style>\n"
-                    "</head>\n"
-                    "<body>\n"
-                    '    <div class="overlay"></div>\n'
-                    '    <div class="header"><div class="tag">How can we</div></div>\n'
-                    '    <div class="card-container"><div class="quote-text">“' + str(formatted_quote) + '”</div></div>\n'
-                    + fg_layer_html + "\n"
-                    '    <div class="footer"><span class="badge">NICE</span></div>\n'
-                    "</body>\n"
-                    "</html>"
-                )
+            with sync_playwright() as p:
+                browser = p.chromium.launch()
+                page = browser.new_page(viewport={"width": 1080, "height": 1440})
+                page.goto(f"file://{os.path.abspath('render_template.html')}", wait_until="networkidle")
+                page.screenshot(path="final_cover.png")
+                browser.close()
 
-                with open("render_template.html", "w", encoding="utf-8") as f:
-                    f.write(html_template)
-
-                with sync_playwright() as p:
-                    browser = p.chromium.launch()
-                    page = browser.new_page(viewport={"width": 1080, "height": 1440})
-                    page.goto(f"file://{os.path.abspath('render_template.html')}", wait_until="networkidle")
-                    page.screenshot(path="final_cover.png")
-                    browser.close()
-
-            st.success(f"🎯 [{template_style}] 风格封面导出成功！")
-
-            # 展示诊断、原帧与 AI 选帧理由
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("💡 AI 智能诊断与选帧拆解")
-                st.info(f"**🎯 选定金句**：{quote}\n\n**✨ 核心高亮词**：`{highlight_word}`\n\n**⏱️ 匹配画面时间**：第 {target_time:.1f} 秒\n\n**📝 AI 选帧与文案理由**：\n> {ai_explanation}")
-                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒截取的唯一原帧", use_container_width=True)
+                st.info(f"**🎯 选定金句**：{quote}\n\n**✨ 核心高亮词**：`{highlight_word}`\n\n**⏱️ 匹配画面时间**：第 {target_time:.1f} 秒\n\n**📝 AI 选帧理由**：\n> {ai_explanation}")
+                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒截图", use_container_width=True)
             with col2:
-                st.subheader("✨ 4K 商业爆款封面")
+                st.subheader(f"✨ 4K 商业爆款封面 [{template_style}]")
                 st.image("final_cover.png", use_container_width=True)
                 with open("final_cover.png", "rb") as f:
                     st.download_button("📥 下载 4K 华丽封面", f, file_name="commercial_cover.png", mime="image/png")
