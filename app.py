@@ -5,8 +5,10 @@ import subprocess
 import cv2
 from moviepy import VideoFileClip
 from openai import OpenAI
+from rembg import remove
+from PIL import Image
 
-# ---------------- 1. 云端环境自愈（自动补全 Playwright Chromium 内核） ----------------
+# ---------------- 1. 云端环境自愈 ----------------
 @st.cache_resource
 def setup_playwright():
     try:
@@ -19,45 +21,36 @@ setup_playwright()
 from playwright.sync_api import sync_playwright
 
 # ---------------- 2. 页面与配置初始化 ----------------
-st.set_page_config(page_title="AI 金句爆款封面生成器", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="AI 商业级爆款封面生成器", layout="wide", page_icon="🎬")
 
-st.title("🔥 AI 视频金句时间戳同步 & 华丽特效封面生成器")
+st.title("✨ AI 视频金句时间戳同步 & 3D 商业级封面生成器")
 
 # 侧边栏 API 配置
 st.sidebar.header("🔑 API 配置")
-api_key = st.sidebar.text_input("Groq API Key", type="password", help="请在此处输入你的 Groq API Key")
+api_key = st.sidebar.text_input("Groq API Key", type="password")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
-# 动态获取 Groq 账号可用的生成式对话模型（自动过滤需协议授权的第三方/分类/语音模型）
+# 商业功能开关
+st.sidebar.header("🎨 商业特效设置")
+enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡/文字后置效果", value=True, help="使用 AI 抠图将文字穿插在人物身后，大幅提升立体感")
+template_style = st.sidebar.selectbox("封面主题样式", ["黑金高奢 (Luxury Glass)", "赛博发光 (Cyber Glow)"])
+
+# 动态获取对话模型
 available_models = []
 if api_key:
     try:
         temp_client = OpenAI(api_key=api_key, base_url=base_url)
         models_res = temp_client.models.list()
-        
-        # 扩展黑名单：过滤非对话类、需特殊协议及安全分类模型
         banned_keywords = ["whisper", "safetensors", "guard", "embedding", "moderation", "canopylabs", "orpheus", "tts"]
-        
-        available_models = [
-            m.id for m in models_res.data 
-            if not any(k in m.id.lower() for k in banned_keywords)
-        ]
-        # 优先将官方推荐的 llama 模型排在前面
+        available_models = [m.id for m in models_res.data if not any(k in m.id.lower() for k in banned_keywords)]
         available_models.sort(key=lambda x: 0 if "llama" in x.lower() else 1)
     except Exception:
         pass
 
 if not available_models:
-    available_models = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
-        "llama-3.2-3b-preview",
-        "gemma2-9b-it"
-    ]
+    available_models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 
 selected_model = st.sidebar.selectbox("选择 Groq AI 对话模型", available_models, index=0)
-custom_model = st.sidebar.text_input("或手动填写模型 ID（留空使用上方选择）", value="")
-final_model = custom_model.strip() if custom_model.strip() else selected_model
 
 uploaded_file = st.file_uploader("上传短视频文件 (MP4 / MOV)", type=["mp4", "mov"])
 
@@ -70,14 +63,14 @@ if uploaded_file is not None and api_key:
 
     st.video("temp_video.mp4")
 
-    if st.button("🚀 开始分析并一键生成爆款封面"):
+    if st.button("🚀 一键生成 3D 商业爆款封面"):
         try:
-            with st.spinner("1/4 正在剥离音频并预处理..."):
+            with st.spinner("1/5 正在剥离视频音频..."):
                 video = VideoFileClip("temp_video.mp4")
                 duration = video.duration
                 video.audio.write_audiofile("temp_audio.mp3", logger=None)
 
-            with st.spinner("2/4 正在使用 Groq Whisper 提取真实视频语音与时间戳..."):
+            with st.spinner("2/5 使用 Groq Whisper 提取真实语音时间戳..."):
                 with open("temp_audio.mp3", "rb") as audio_file:
                     transcription = client.audio.transcriptions.create(
                         file=("temp_audio.mp3", audio_file.read()),
@@ -89,30 +82,25 @@ if uploaded_file is not None and api_key:
                 raw_segments = getattr(transcription, "segments", [])
                 real_segments = []
                 for seg in raw_segments:
-                    if isinstance(seg, dict):
-                        real_segments.append({"start": round(seg.get("start", 0), 2), "end": round(seg.get("end", 0), 2), "text": seg.get("text", "").strip()})
-                    else:
-                        real_segments.append({"start": round(getattr(seg, "start", 0), 2), "end": round(getattr(seg, "end", 0), 2), "text": getattr(seg, "text", "").strip()})
+                    text_val = seg.get("text", "") if isinstance(seg, dict) else getattr(seg, "text", "")
+                    start_val = seg.get("start", 0) if isinstance(seg, dict) else getattr(seg, "start", 0)
+                    real_segments.append({"start": round(start_val, 2), "text": text_val.strip()})
 
                 if not real_segments:
-                    real_segments = [{"start": 0.5, "end": min(5.0, duration), "text": "未能成功提取出文本内容"}]
+                    real_segments = [{"start": 0.5, "text": "Pro Quality Video Content"}]
 
-            with st.spinner(f"3/4 大模型 ({final_model}) 提炼真实金句并匹配精准画面时间戳..."):
+            with st.spinner("3/5 大模型分析提炼震撼金句..."):
                 prompt = (
-                    "你是一个社媒爆款标题专家。请分析以下真实视频提取的带时间戳字幕，挑选出最震撼、最能拉满点击率的 1 句金句。\n"
-                    + f"真实字幕数据：{json.dumps(real_segments, ensure_ascii=False)}\n\n"
-                    + "请严格只返回以下 JSON 格式：\n"
-                    + "{\n"
-                    + '    "golden_quote": "最刺激痛点或引发共鸣的金句（必须出自字幕原文，12-18字以内）",\n'
-                    + '    "start_time": 对应这句话在视频中的开始时间秒数(float),\n'
-                    + '    "highlight_word": "金句中最核心需要高亮/发光的词语（2-4字）"\n'
-                    + "}"
+                    "分析字幕挑选最拉满点击率的 1 句金句。\n"
+                    + f"字幕：{json.dumps(real_segments, ensure_ascii=False)}\n\n"
+                    + "严格只返回 JSON:\n"
+                    + '{"golden_quote": "金句原文", "start_time": 秒数(float), "highlight_word": "高亮词"}'
                 )
 
                 response = client.chat.completions.create(
-                    model=final_model,
+                    model=selected_model,
                     messages=[
-                        {"role": "system", "content": "You are a helpful assistant that outputs raw JSON."},
+                        {"role": "system", "content": "You are a professional social media title designer that outputs raw JSON."},
                         {"role": "user", "content": prompt}
                     ],
                     response_format={"type": "json_object"}
@@ -121,75 +109,106 @@ if uploaded_file is not None and api_key:
                 res = json.loads(response.choices[0].message.content)
                 quote = res.get("golden_quote", real_segments[0]["text"])
                 target_time = float(res.get("start_time", real_segments[0]["start"]))
-                highlight_word = res.get("highlight_word", quote[:2] if len(quote)>=2 else quote)
+                highlight_word = res.get("highlight_word", quote.split()[0] if quote.split() else quote)
 
                 target_time = min(max(0.5, target_time), duration - 0.5)
 
                 video.save_frame("temp_frame.jpg", t=target_time)
                 video.close()
 
-            with st.spinner("4/4 正在加载 HTML 特效模板并导出 4K 封面..."):
+            # 抠图处理逻辑 (AI 生成前景蒙版)
+            fg_layer_html = ""
+            if enable_3d_depth:
+                with st.spinner("4/5 正在进行 AI 人像扣图，合成 3D 景深穿插图层..."):
+                    input_img = Image.open("temp_frame.jpg")
+                    output_img = remove(input_img)
+                    output_img.save("temp_fg.png")
+                    fg_layer_html = '<div class="fg-layer"></div>'
+            else:
+                with st.spinner("4/5 跳过抠图，准备普通渲染..."):
+                    pass
+
+            with st.spinner("5/5 渲染 4K 商业网页特效封面..."):
                 formatted_quote = quote.replace(
                     highlight_word, 
                     f'<span class="glow-word">{highlight_word}</span>'
                 )
 
+                # 样式与字体定义
+                if "Cyber" in template_style:
+                    glow_color = "#00FFFF"
+                    badge_bg = "linear-gradient(90deg, #00F2FE 0%, #4FACFE 100%)"
+                else:
+                    glow_color = "#FFE600"
+                    badge_bg = "linear-gradient(90deg, #FFE600 0%, #FF9900 100%)"
+
                 html_template = (
                     "<!DOCTYPE html>\n"
                     "<html>\n"
                     "<head>\n"
+                    "    <link rel='preconnect' href='https://fonts.googleapis.com'>\n"
+                    "    <link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>\n"
+                    "    <link href='https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Noto+Sans+SC:wght@900&display=swap' rel='stylesheet'>\n"
                     "    <style>\n"
                     "        * { box-sizing: border-box; margin: 0; padding: 0; }\n"
                     "        body {\n"
                     "            width: 1080px; height: 1440px;\n"
                     "            background: url('temp_frame.jpg') center/cover no-repeat;\n"
-                    "            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;\n"
+                    "            font-family: 'Montserrat', 'Noto Sans SC', sans-serif;\n"
                     "            display: flex; flex-direction: column; justify-content: space-between;\n"
                     "            padding: 100px 70px;\n"
                     "            position: relative; overflow: hidden;\n"
                     "        }\n"
+                    "        /* 背景半透明渐变罩 */\n"
                     "        .overlay {\n"
                     "            position: absolute; top:0; left:0; width:100%; height:100%;\n"
-                    "            background: linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.75) 100%);\n"
-                    "            backdrop-filter: blur(12px) brightness(0.85);\n"
+                    "            background: linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.7) 100%);\n"
+                    "            backdrop-filter: blur(4px);\n"
                     "            z-index: 1;\n"
                     "        }\n"
                     "        .header { position: relative; z-index: 2; }\n"
                     "        .tag {\n"
                     "            display: inline-block;\n"
-                    "            background: linear-gradient(90deg, #FFE600 0%, #FF9900 100%);\n"
-                    "            color: #000; font-size: 38px; font-weight: 900;\n"
+                    "            background: " + badge_bg + ";\n"
+                    "            color: #000; font-size: 36px; font-weight: 900;\n"
                     "            padding: 14px 36px; border-radius: 50px;\n"
-                    "            box-shadow: 0 10px 30px rgba(255, 230, 0, 0.4);\n"
+                    "            box-shadow: 0 10px 25px rgba(0,0,0,0.4);\n"
                     "        }\n"
+                    "        /* 中层：金句卡片（Z-index 为 2） */\n"
                     "        .card-container {\n"
                     "            position: relative; z-index: 2;\n"
-                    "            background: rgba(255, 255, 255, 0.07);\n"
-                    "            border: 2px solid rgba(255, 255, 255, 0.18);\n"
-                    "            border-radius: 40px; padding: 70px 50px;\n"
-                    "            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);\n"
+                    "            background: rgba(18, 18, 18, 0.4);\n"
+                    "            border: 2px solid rgba(255, 255, 255, 0.2);\n"
+                    "            border-radius: 40px; padding: 65px 50px;\n"
+                    "            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);\n"
+                    "            backdrop-filter: blur(12px);\n"
                     "        }\n"
                     "        .quote-text {\n"
                     "            color: #FFFFFF; font-size: 76px; font-weight: 900;\n"
-                    "            line-height: 1.3; letter-spacing: 3px;\n"
-                    "            text-shadow: 0 5px 15px rgba(0,0,0,0.8);\n"
+                    "            line-height: 1.25; letter-spacing: -1px;\n"
+                    "            text-shadow: 0 5px 20px rgba(0,0,0,0.9);\n"
                     "        }\n"
                     "        .glow-word {\n"
-                    "            color: #FFE600;\n"
-                    "            text-shadow: 0 0 20px rgba(255, 230, 0, 0.8),\n"
-                    "                         0 0 40px rgba(255, 230, 0, 0.5);\n"
-                    "            display: inline-block; padding: 0 10px;\n"
+                    "            color: " + glow_color + ";\n"
+                    "            text-shadow: 0 0 25px " + glow_color + ";\n"
+                    "            display: inline-block; padding: 0 8px;\n"
+                    "        }\n"
+                    "        /* 最上层：抠出的人物前景（Z-index 为 3，压在文字上面） */\n"
+                    "        .fg-layer {\n"
+                    "            position: absolute; top:0; left:0; width:100%; height:100%;\n"
+                    "            background: url('temp_fg.png') center/cover no-repeat;\n"
+                    "            z-index: 3;\n"
+                    "            pointer-events: none;\n"
                     "        }\n"
                     "        .footer {\n"
-                    "            position: relative; z-index: 2;\n"
+                    "            position: relative; z-index: 4;\n"
                     "            display: flex; justify-content: flex-end; align-items: center;\n"
-                    "            color: rgba(255, 255, 255, 0.7); font-size: 28px; font-weight: 600;\n"
-                    "            border-top: 1px solid rgba(255, 255, 255, 0.2); padding-top: 40px;\n"
+                    "            border-top: 1px solid rgba(255, 255, 255, 0.2); padding-top: 35px;\n"
                     "        }\n"
-                    "        .timestamp-badge {\n"
-                    "            background: rgba(0,0,0,0.5); padding: 8px 24px;\n"
-                    "            border-radius: 12px; color: #FFE600; font-family: sans-serif;\n"
-                    "            font-size: 32px; font-weight: bold;\n"
+                    "        .badge {\n"
+                    "            background: rgba(0,0,0,0.6); padding: 10px 28px;\n"
+                    "            border-radius: 14px; color: " + glow_color + "; font-size: 32px; font-weight: 900;\n"
+                    "            border: 1px solid rgba(255,255,255,0.2);\n"
                     "        }\n"
                     "    </style>\n"
                     "</head>\n"
@@ -197,9 +216,8 @@ if uploaded_file is not None and api_key:
                     '    <div class="overlay"></div>\n'
                     '    <div class="header"><div class="tag">How can we</div></div>\n'
                     '    <div class="card-container"><div class="quote-text">“' + str(formatted_quote) + '”</div></div>\n'
-                    '    <div class="footer">\n'
-                    '        <span class="timestamp-badge">NICE</span>\n'
-                    '    </div>\n'
+                    + fg_layer_html + "\n"
+                    '    <div class="footer"><span class="badge">NICE</span></div>\n'
                     "</body>\n"
                     "</html>"
                 )
@@ -210,11 +228,11 @@ if uploaded_file is not None and api_key:
                 with sync_playwright() as p:
                     browser = p.chromium.launch()
                     page = browser.new_page(viewport={"width": 1080, "height": 1440})
-                    page.goto(f"file://{os.path.abspath('render_template.html')}")
+                    page.goto(f"file://{os.path.abspath('render_template.html')}", wait_until="networkidle")
                     page.screenshot(path="final_cover.png")
                     browser.close()
 
-            st.success(f"🎯 渲染完成！已自动匹配视频第 {target_time:.1f} 秒的金句画面！")
+            st.success("🎯 3D 景深爆款封面导出成功！")
 
             col1, col2 = st.columns(2)
             with col1:
@@ -222,10 +240,10 @@ if uploaded_file is not None and api_key:
                 st.info(f"**提炼金句**：{quote}\n\n**高亮发光词**：`{highlight_word}`")
                 st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒截图", use_container_width=True)
             with col2:
-                st.subheader("✨ 华丽爆款封面")
+                st.subheader("✨ 3D 商业级封面")
                 st.image("final_cover.png", use_container_width=True)
                 with open("final_cover.png", "rb") as f:
-                    st.download_button("📥 下载 4K 华丽封面", f, file_name="luxury_cover.png", mime="image/png")
+                    st.download_button("📥 下载 4K 华丽封面", f, file_name="commercial_3d_cover.png", mime="image/png")
 
         except Exception as e:
             st.error(f"处理失败: {str(e)}")
