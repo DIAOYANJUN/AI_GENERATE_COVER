@@ -67,7 +67,8 @@ st.sidebar.markdown(f"**当前登录**：`{st.session_state.get('username')}` ({
 if not is_vip:
     with st.sidebar.expander("💳 **升级 VIP 专属权益（微信扫码）**", expanded=True):
         st.write("🔥 **VIP 专享特权**：")
-        st.write("• 解锁三大独立架构**真实模板库**")
+        st.write("• 解锁三大独立架构真实模板库")
+        st.write("• 解锁**随机气泡与气球粒子叠加引擎**")
         st.write("• 解锁 AI 超清修复与 3D 人像景深穿插")
         st.markdown("---")
         st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
@@ -108,21 +109,26 @@ template_style = st.sidebar.selectbox(
 )
 
 st.sidebar.markdown("---")
-if st.sidebar.button("🎲【随机切换整套独立架构模板】", use_container_width=True):
-    st.session_state.layout_index = random.randint(0, 2) # 随机切换不同的 HTML 结构
-    st.toast("✨ 已彻底切换为另一套排版架构！")
+if st.sidebar.button("🎲【随机切换版式 & 气泡粒子】", use_container_width=True):
+    st.session_state.layout_index = random.randint(0, 2)
+    st.session_state.bubble_seed = random.randint(1000, 99999) # 强制刷新气泡位置
+    st.toast("✨ 已重新洗牌版式，气泡与粒子随机叠加生成！")
 
 if "layout_index" not in st.session_state:
     st.session_state.layout_index = 0
+if "bubble_seed" not in st.session_state:
+    st.session_state.bubble_seed = 42
 
 if not is_vip:
     ai_upscale = st.sidebar.checkbox("🚀 AI 智能高清修复 (2x) (VIP专享)", value=False, disabled=True)
     ai_retouch = st.sidebar.checkbox("✨ 电影级色彩 P 图美化 (VIP专享)", value=False, disabled=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果 (VIP专享)", value=False, disabled=True)
+    enable_bubbles = st.sidebar.checkbox("🎈 开启随机气泡/气球图案叠加 (VIP专享)", value=False, disabled=True)
 else:
     ai_upscale = st.sidebar.checkbox("🚀 AI 智能高清修复 (2x)", value=True)
     ai_retouch = st.sidebar.checkbox("✨ 电影级色彩 P 图美化", value=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果", value=True)
+    enable_bubbles = st.sidebar.checkbox("🎈 开启随机气泡/气球图案叠加", value=True)
 
 available_models = []
 if api_key:
@@ -141,7 +147,7 @@ if not available_models:
 selected_model = st.sidebar.selectbox("选择 Groq AI 对话模型", available_models, index=0)
 uploaded_file = st.file_uploader("上传短视频文件 (MP4 / MOV)", type=["mp4", "mov"])
 
-# ---------------- 3. 核心处理与真实多模板渲染 ----------------
+# ---------------- 3. 核心处理与渲染 ----------------
 if uploaded_file is not None and api_key:
     if "analyzed_data" not in st.session_state or st.session_state.get("last_file") != uploaded_file.name:
         with open("temp_video.mp4", "wb") as f:
@@ -215,7 +221,7 @@ if uploaded_file is not None and api_key:
             "target_time": target_time,
             "ai_explanation": ai_explanation
         }
-        st.success("🎉 分析就绪！点击侧边栏【随机切换整套独立架构模板】体验完全不同的版式。")
+        st.success("🎉 分析就绪！")
 
     if "analyzed_data" in st.session_state:
         data = st.session_state.analyzed_data
@@ -232,7 +238,35 @@ if uploaded_file is not None and api_key:
             formatted_quote = quote.replace(highlight_word, f'<span class="glow-word">{highlight_word}</span>')
             fg_layer_html = '<div class="fg-layer"></div>' if (enable_3d_depth and is_vip) else ''
 
-            # 色彩配置
+            # 🎈 动态气泡/气球图案叠加生成器（每次洗牌生成绝对不重复的随机浮动气泡）
+            bubbles_html = ""
+            if enable_bubbles and is_vip:
+                random.seed(st.session_state.bubble_seed)
+                bubble_count = random.randint(8, 14)
+                for _ in range(bubble_count):
+                    bx = random.randint(50, 1000)
+                    by = random.randint(100, 1350)
+                    bsize = random.randint(30, 120)
+                    bopacity = round(random.uniform(0.15, 0.45), 2)
+                    bcolor = random.choice(["rgba(255,255,255,", "rgba(0,255,255,", "rgba(255,230,0,", "rgba(255,100,150,"])
+                    final_color = f"{bcolor}{bopacity})"
+                    
+                    # 随机气泡或发光圆点样式
+                    bubbles_html += f"""
+                    <div style="
+                        position: absolute;
+                        left: {bx}px;
+                        top: {by}px;
+                        width: {bsize}px;
+                        height: {bsize}px;
+                        background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.8), {final_color});
+                        border-radius: 50%;
+                        box-shadow: 0 0 25px {final_color};
+                        z-index: 15;
+                        pointer-events: none;
+                    "></div>
+                    """
+
             if "Cyber" in template_style:
                 glow_color = "#00FFFF"
                 badge_bg = "linear-gradient(90deg, #00F2FE 0%, #4FACFE 100%)"
@@ -256,9 +290,7 @@ if uploaded_file is not None and api_key:
 
             current_layout = st.session_state.layout_index
 
-            # ---------------- 3套完全独立的 HTML 结构模板 ----------------
             if current_layout == 0:
-                # 模板 A：巨幕中央沉浸式结构
                 html_template = f"""
                 <!DOCTYPE html>
                 <html>
@@ -277,11 +309,12 @@ if uploaded_file is not None and api_key:
                         .tag {{ display: inline-block; background: {badge_bg}; color: #000; font-size: 32px; font-weight: 900; padding: 12px 30px; border-radius: 12px; margin-bottom: 40px; }}
                         .quote-text {{ color: #FFFFFF; font-size: 82px; font-weight: 900; line-height: 1.2; text-shadow: 0 10px 30px rgba(0,0,0,0.9); }}
                         .glow-word {{ color: {glow_color}; text-shadow: 0 0 30px {glow_color}; }}
-                        .fg-layer {{ position: absolute; top:0; left:0; width:100%; height:100%; background: url('temp_fg.png') center/cover no-repeat; z-index: 3; pointer-events: none; }}
+                        .fg-layer {{ position: absolute; top:0; left:0; width:100%; height:100%; background: url('temp_fg.png') center/cover no-repeat; z-index: 20; pointer-events: none; }}
                     </style>
                 </head>
                 <body>
                     <div class="overlay"></div>
+                    {bubbles_html}
                     <div class="content-box">
                         <div class="tag">🔥 EXCLUSIVE INSIGHT</div>
                         <div class="quote-text">“{formatted_quote}”</div>
@@ -291,7 +324,6 @@ if uploaded_file is not None and api_key:
                 </html>
                 """
             elif current_layout == 1:
-                # 模板 B：左侧悬浮多巴胺杂志风结构
                 html_template = f"""
                 <!DOCTYPE html>
                 <html>
@@ -310,11 +342,12 @@ if uploaded_file is not None and api_key:
                         .card {{ position: relative; z-index: 2; background: {card_bg}; border-left: 12px solid {glow_color}; border-radius: 0 30px 30px 0; padding: 70px; backdrop-filter: blur(15px); }}
                         .quote-text {{ color: #FFFFFF; font-size: 72px; font-weight: 900; line-height: 1.3; text-shadow: 0 5px 20px rgba(0,0,0,0.9); }}
                         .glow-word {{ color: {glow_color}; text-shadow: 0 0 25px {glow_color}; }}
-                        .fg-layer {{ position: absolute; top:0; left:0; width:100%; height:100%; background: url('temp_fg.png') center/cover no-repeat; z-index: 3; pointer-events: none; }}
+                        .fg-layer {{ position: absolute; top:0; left:0; width:100%; height:100%; background: url('temp_fg.png') center/cover no-repeat; z-index: 20; pointer-events: none; }}
                     </style>
                 </head>
                 <body>
                     <div class="overlay"></div>
+                    {bubbles_html}
                     <div class="header-tag">⚡ 深度解密</div>
                     <div class="card">
                         <div class="quote-text">“{formatted_quote}”</div>
@@ -324,7 +357,6 @@ if uploaded_file is not None and api_key:
                 </html>
                 """
             else:
-                # 模板 C：底部全屏沉浸式字幕条结构
                 html_template = f"""
                 <!DOCTYPE html>
                 <html>
@@ -345,11 +377,12 @@ if uploaded_file is not None and api_key:
                         .brand {{ color: {glow_color}; font-size: 28px; font-weight: 900; letter-spacing: 2px; }}
                         .quote-text {{ color: #FFFFFF; font-size: 68px; font-weight: 900; line-height: 1.25; }}
                         .glow-word {{ color: {glow_color}; text-shadow: 0 0 25px {glow_color}; }}
-                        .fg-layer {{ position: absolute; top:0; left:0; width:100%; height:100%; background: url('temp_fg.png') center/cover no-repeat; z-index: 3; pointer-events: none; }}
+                        .fg-layer {{ position: absolute; top:0; left:0; width:100%; height:100%; background: url('temp_fg.png') center/cover no-repeat; z-index: 20; pointer-events: none; }}
                     </style>
                 </head>
                 <body>
                     <div class="overlay"></div>
+                    {bubbles_html}
                     <div class="bottom-panel">
                         <div class="tag-row">
                             <span class="tag">TOPIC FOCUS</span>
@@ -375,7 +408,7 @@ if uploaded_file is not None and api_key:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("💡 架构模板状态")
-                st.info(f"**当前套用的独立版式结构**：`模板架构 #{current_layout + 1} (共3套)`\n\n**🎯 选定金句**：{quote}\n\n**⏱️ 匹配画面**：第 {target_time:.1f} 秒\n\n> {ai_explanation}")
+                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**🎈 随机气泡引擎**：已随机叠加多维粒子与气泡装饰\n\n> {ai_explanation}")
                 st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒原帧", use_container_width=True)
             with col2:
                 st.subheader(f"✨ 4K 商业爆款封面 [{template_style}]")
