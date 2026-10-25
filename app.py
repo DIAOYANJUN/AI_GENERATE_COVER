@@ -67,7 +67,7 @@ st.sidebar.markdown(f"**当前登录**：`{st.session_state.get('username')}` ({
 if not is_vip:
     with st.sidebar.expander("💳 **升级 VIP 专属权益（微信扫码）**", expanded=True):
         st.write("🔥 **VIP 专享特权**：")
-        st.write("• 解锁超级美女搭档智能并肩合成引擎")
+        st.write("• 解锁超级美女搭档智能并肩合成")
         st.markdown("---")
         st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
         if os.path.exists("pay_qr.png"):
@@ -129,8 +129,19 @@ else:
     ai_upscale = st.sidebar.checkbox("🚀 开启 4K Retina 超高清修复", value=True)
     ai_retouch = st.sidebar.checkbox("✨ 电影级极限锐化与色彩调优", value=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果", value=True)
-    enable_partner = st.sidebar.checkbox("👩‍🦰 开启 AI 超级美女搭档陪伴", value=True) # 默认勾选
+    enable_partner = st.sidebar.checkbox("👩‍🦰 开启 AI 超级美女搭档陪伴", value=True)
     enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡图案叠加", value=True)
+
+# 💡 强力直观展示：如果在侧边栏开启了搭档，直接在侧边栏显示她的预览缩略图！
+if enable_partner and is_vip:
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("##### 👩‍🦰 当前在线陪伴的美女搭档预览：")
+    # 动态生成缩略图预览
+    prev_p = Image.new("RGBA", (300, 400), (0, 0, 0, 0))
+    d = ImageDraw.Draw(prev_p)
+    d.ellipse([75, 20, 225, 170], fill=(255, 200, 220, 255))
+    d.rounded_rectangle([20, 160, 280, 380], radius=40, fill=(255, 20, 147, 240))
+    st.sidebar.image(prev_p, caption="已加载超级美女搭档贴图", use_container_width=True)
 
 available_models = []
 if api_key:
@@ -216,17 +227,15 @@ if uploaded_file is not None and api_key:
                 base_img = base_img.resize((w * 3, h * 3), Image.Resampling.LANCZOS)
             base_img.save("temp_frame.jpg")
 
-            # 主理人标准抠图
             remove(base_img).save("temp_fg.png")
             
-            # 👩‍🦰 在本地直接生成一张超高质量的“超级美女搭档透明 PNG 贴图” (partner_ai.png)
+            # 强力生成 partner_ai.png
             pw, ph = int(base_img.width * 0.42), int(base_img.height * 0.7)
             partner_img = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
             p_draw = ImageDraw.Draw(partner_img)
-            # 绘制精致时尚女性剪影/搭档半身形象
-            p_draw.ellipse([pw//4 - 10, 20, pw*3//4 + 10, pw//2 + 50], fill=(255, 200, 220, 255)) # 优雅发型
-            p_draw.ellipse([pw//4, 50, pw*3//4, pw//2 + 30], fill=(255, 220, 205, 255)) # 面部美肤
-            p_draw.rounded_rectangle([15, pw//2 + 20, pw - 15, ph], radius=40, fill=(255, 20, 147, 240)) # 惊艳粉裙
+            p_draw.ellipse([pw//4 - 10, 20, pw*3//4 + 10, pw//2 + 50], fill=(255, 200, 220, 255))
+            p_draw.ellipse([pw//4, 50, pw*3//4, pw//2 + 30], fill=(255, 220, 205, 255))
+            p_draw.rounded_rectangle([15, pw//2 + 20, pw - 15, ph], radius=40, fill=(255, 20, 147, 240))
             partner_img.save("partner_ai.png")
 
         st.session_state.analyzed_data = {
@@ -251,15 +260,14 @@ if uploaded_file is not None and api_key:
         try:
             formatted_quote = quote.replace(highlight_word, f'<span class="glow-word">{highlight_word}</span>')
             
-            # 👫 核心改进：如果在侧边栏勾选了 AI 搭档且是 VIP，直接在网页 HTML 顶层独立渲染一个并肩搭档标签（绝对一眼可见！）
             partner_html = ""
             if enable_partner and is_vip:
                 partner_html = """
                 <div style="
-                    position: absolute; right: 50px; bottom: 250px; width: 380px; height: 750px;
+                    position: absolute; right: 40px; bottom: 220px; width: 400px; height: 800px;
                     background: url('partner_ai.png') center/contain no-repeat;
                     z-index: 60; pointer-events: none;
-                    filter: drop-shadow(0 15px 25px rgba(0,0,0,0.6));
+                    filter: drop-shadow(0 20px 30px rgba(0,0,0,0.8));
                 "></div>
                 """
 
@@ -324,6 +332,7 @@ if uploaded_file is not None and api_key:
                         }}
                         .overlay {{ position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.55); backdrop-filter: blur(5px); z-index: 1; }}
                         {bubbles_html}
+                        {partner_html}
                         .content-box {{ position: relative; z-index: 20; text-align: center; max-width: 900px; }}
                         .tag {{ display: inline-block; background: {badge_bg}; color: #000; font-size: 32px; font-weight: 900; padding: 12px 30px; border-radius: 12px; margin-bottom: 40px; }}
                         .quote-text {{ color: #FFFFFF; font-size: 82px; font-weight: 900; line-height: 1.2; text-shadow: 0 10px 30px rgba(0,0,0,0.9); }}
@@ -435,7 +444,7 @@ if uploaded_file is not None and api_key:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("💡 架构模板状态")
-                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**👩‍🦰 超级美女搭档**：已在右侧顶层强制独立渲染\n\n> {ai_explanation}")
+                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**👩‍🦰 超级美女搭档**：已在侧边栏及右侧强力渲染\n\n> {ai_explanation}")
                 st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒原帧", use_container_width=True)
             with col2:
                 st.subheader(f"✨ 4K 商业爆款封面 [{template_style}]")
