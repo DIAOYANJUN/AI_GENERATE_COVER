@@ -8,6 +8,40 @@ from openai import OpenAI
 from rembg import remove
 from PIL import Image
 
+# ---------------- 0. 登录身份验证系统 ----------------
+st.set_page_config(page_title="AI 商业级爆款封面生成器", layout="wide", page_icon="🎬")
+
+# 预设管理员/测试账号密码（你可以在此处自由修改）
+USER_CREDENTIALS = {
+    "admin": "123456",
+    "vipuser": "vip888"
+}
+
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+    st.title("🔐 AI 爆款封面生成器 - 用户登录")
+    st.markdown("---")
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        with st.form("login_form"):
+            st.subheader("账号登录")
+            username = st.text_input("用户名", value="admin")
+            password = st.text_input("密码", type="password", value="123456")
+            submit = st.form_submit_button("🚀 立即登录")
+            
+            if submit:
+                if username in USER_CREDENTIALS and USER_CREDENTIALS[username] == password:
+                    st.session_state.logged_in = True
+                    st.session_state.username = username
+                    st.success("✅ 登录成功！正在进入系统...")
+                    st.rerun()
+                else:
+                    st.error("❌ 用户名或密码错误")
+    st.stop()
+
 # ---------------- 1. 云端环境自愈 ----------------
 @st.cache_resource
 def setup_playwright():
@@ -21,16 +55,22 @@ setup_playwright()
 from playwright.sync_api import sync_playwright
 
 # ---------------- 2. 页面与配置初始化 ----------------
-st.set_page_config(page_title="AI 商业级爆款封面生成器", layout="wide", page_icon="🎬")
-
 st.title("✨ AI 视频金句时间戳同步 & 多风格商业封面生成器")
 
-# 侧边栏 API 配置
+# 侧边栏：账号信息与退出登录
+st.sidebar.markdown(f"👤 **当前登录**：`{st.session_state.get('username', 'User')}`")
+if st.sidebar.button("🚪 退出登录"):
+    st.session_state.logged_in = False
+    st.rerun()
+
+st.sidebar.markdown("---")
+
+# 侧边栏：API 配置
 st.sidebar.header("🔑 API 配置")
 api_key = st.sidebar.text_input("Groq API Key", type="password")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
-# ---------------- 侧边栏新增：封面风格选择 ----------------
+# ---------------- 侧边栏：封面视觉设计（带 VIP 标识） ----------------
 st.sidebar.header("🎨 封面视觉设计")
 
 template_style = st.sidebar.selectbox(
@@ -38,7 +78,7 @@ template_style = st.sidebar.selectbox(
     [
         "黑金高奢 (Luxury Glass)", 
         "赛博霓虹 (Cyber Glow)", 
-        "小红书爆款 (High-CTR Yellow)", 
+        "小红书爆款 (High-CTR Yellow) 👑 VIP 独享", 
         "时尚杂志 (Editorial Magazine)"
     ],
     index=0
@@ -100,7 +140,7 @@ if uploaded_file is not None and api_key:
                 if not real_segments:
                     real_segments = [{"start": 0.5, "text": "Pro Quality Video Content"}]
 
-            with st.spinner("3/5 大模型分析提炼震撼金句..."):
+            with st.spinner("3/5 大模型分析提炼震撼金句（已锁定稳定输出）..."):
                 prompt = (
                     "分析字幕挑选最拉满点击率的 1 句金句。\n"
                     + f"字幕：{json.dumps(real_segments, ensure_ascii=False)}\n\n"
@@ -108,13 +148,16 @@ if uploaded_file is not None and api_key:
                     + '{"golden_quote": "金句原文", "start_time": 秒数(float), "highlight_word": "高亮词"}'
                 )
 
+                # 锁定 temperature=0.0 与 seed=42 确保输出固定
                 response = client.chat.completions.create(
                     model=selected_model,
                     messages=[
                         {"role": "system", "content": "You are a professional social media title designer that outputs raw JSON."},
                         {"role": "user", "content": prompt}
                     ],
-                    response_format={"type": "json_object"}
+                    response_format={"type": "json_object"},
+                    temperature=0.0,
+                    seed=42
                 )
 
                 res = json.loads(response.choices[0].message.content)
@@ -147,7 +190,6 @@ if uploaded_file is not None and api_key:
 
                 # ---------------- 根据所选风格配置 CSS 样式 ----------------
                 if "Cyber" in template_style:
-                    # 赛博霓虹
                     font_import = "@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@800;900&family=Noto+Sans+SC:wght@900&display=swap');"
                     font_family = "'Orbitron', 'Noto Sans SC', sans-serif"
                     glow_color = "#00FFFF"
@@ -155,8 +197,8 @@ if uploaded_file is not None and api_key:
                     card_bg = "rgba(10, 25, 47, 0.55)"
                     border_color = "rgba(0, 255, 255, 0.4)"
                     badge_text_color = "#000"
-                elif "Yellow" in template_style:
-                    # 小红书爆款
+                elif "Yellow" in template_style or "VIP" in template_style:
+                    # 小红书爆款 (👑 VIP)
                     font_import = "@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Noto+Sans+SC:wght@900&display=swap');"
                     font_family = "'Montserrat', 'Noto Sans SC', sans-serif"
                     glow_color = "#FFE600"
@@ -165,7 +207,6 @@ if uploaded_file is not None and api_key:
                     border_color = "rgba(255, 230, 0, 0.5)"
                     badge_text_color = "#000"
                 elif "Magazine" in template_style:
-                    # 时尚杂志
                     font_import = "@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@800;900&family=Noto+Serif+SC:wght@900&display=swap');"
                     font_family = "'Cinzel', 'Noto Serif SC', serif"
                     glow_color = "#E6C200"
@@ -174,7 +215,6 @@ if uploaded_file is not None and api_key:
                     border_color = "rgba(255, 255, 255, 0.4)"
                     badge_text_color = "#000"
                 else:
-                    # 黑金高奢 (默认)
                     font_import = "@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Noto+Sans+SC:wght@900&display=swap');"
                     font_family = "'Montserrat', 'Noto Sans SC', sans-serif"
                     glow_color = "#FFE600"
