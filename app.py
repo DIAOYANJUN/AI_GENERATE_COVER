@@ -28,16 +28,14 @@ st.sidebar.header("🔑 API 配置")
 api_key = st.sidebar.text_input("Groq API Key", type="password", help="请在此处输入你的 Groq API Key")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
-# 动态获取 Groq 账号可用的生成式对话模型（自动过滤 guard/whisper/分类模型）
+# 动态获取 Groq 账号可用的生成式对话模型
 available_models = []
 if api_key:
     try:
         temp_client = OpenAI(api_key=api_key, base_url=base_url)
         models_res = temp_client.models.list()
         
-        # 黑名单关键词：过滤掉非对话类及安全分类模型
         banned_keywords = ["whisper", "safetensors", "guard", "embedding", "moderation"]
-        
         available_models = [
             m.id for m in models_res.data 
             if not any(k in m.id.lower() for k in banned_keywords)
@@ -75,22 +73,36 @@ if uploaded_file is not None and api_key:
                 duration = video.duration
                 video.audio.write_audiofile("temp_audio.mp3", logger=None)
 
-            with st.spinner("2/4 正在进行带时间戳的语音识别..."):
-                mock_segments = [
-                    {"start": 1.5, "end": 4.5, "text": "很多人天天在想怎么赚大钱，结果连底层的商业杠杆都没摸清。"},
-                    {"start": 5.2, "end": 9.0, "text": "真正的高手从来不靠体力赚钱，他们用代码和 API 作为杠杆。"},
-                    {"start": 9.5, "end": 13.0, "text": "一个人加一套极速交付流程，你就能成为一家高效运行的公司。"}
-                ]
+            with st.spinner("2/4 正在使用 Groq Whisper 提取真实视频语音与时间戳..."):
+                with open("temp_audio.mp3", "rb") as audio_file:
+                    transcription = client.audio.transcriptions.create(
+                        file=("temp_audio.mp3", audio_file.read()),
+                        model="whisper-large-v3-turbo",
+                        response_format="verbose_json",
+                        timestamp_granularities=["segment"]
+                    )
+                
+                # 解析提取真实带时间戳的字幕数据
+                raw_segments = getattr(transcription, "segments", [])
+                real_segments = []
+                for seg in raw_segments:
+                    if isinstance(seg, dict):
+                        real_segments.append({"start": round(seg.get("start", 0), 2), "end": round(seg.get("end", 0), 2), "text": seg.get("text", "").strip()})
+                    else:
+                        real_segments.append({"start": round(getattr(seg, "start", 0), 2), "end": round(getattr(seg, "end", 0), 2), "text": getattr(seg, "text", "").strip()})
 
-            with st.spinner(f"3/4 大模型 ({final_model}) 提炼金句并匹配精准画面时间戳..."):
+                if not real_segments:
+                    real_segments = [{"start": 0.5, "end": min(5.0, duration), "text": "未能成功提取出文本内容"}]
+
+            with st.spinner(f"3/4 大模型 ({final_model}) 提炼真实金句并匹配精准画面时间戳..."):
                 prompt = (
-                    "你是一个社媒爆款标题专家。请分析以下带时间戳的视频字幕，挑选出最震撼、最能拉满点击率的 1 句金句。\n"
-                    + f"字幕数据：{json.dumps(mock_segments, ensure_ascii=False)}\n\n"
+                    "你是一个社媒爆款标题专家。请分析以下真实视频提取的带时间戳字幕，挑选出最震撼、最能拉满点击率的 1 句金句。\n"
+                    + f"真实字幕数据：{json.dumps(real_segments, ensure_ascii=False)}\n\n"
                     + "请严格只返回以下 JSON 格式：\n"
                     + "{\n"
-                    + '    "golden_quote": "最刺激痛点或引发共鸣的金句（12-18字以内）",\n'
+                    + '    "golden_quote": "最刺激痛点或引发共鸣的金句（必须出自字幕原文，12-18字以内）",\n'
                     + '    "start_time": 对应这句话在视频中的开始时间秒数(float),\n'
-                    + '    "tag": "爆款分类标签（如：认知觉醒 / 商业逻辑）",\n'
+                    + '    "tag": "爆款分类标签（如：认知觉醒 / 商业逻辑 / 干货分享）",\n'
                     + '    "highlight_word": "金句中最核心需要高亮/发光的词语（2-4字）"\n'
                     + "}"
                 )
@@ -105,10 +117,10 @@ if uploaded_file is not None and api_key:
                 )
 
                 res = json.loads(response.choices[0].message.content)
-                quote = res.get("golden_quote", "用代码和 API 作为杠杆，一个人就是一家公司")
-                target_time = float(res.get("start_time", 5.2))
-                tag = res.get("tag", "认知觉醒")
-                highlight_word = res.get("highlight_word", "杠杆")
+                quote = res.get("golden_quote", real_segments[0]["text"])
+                target_time = float(res.get("start_time", real_segments[0]["start"]))
+                tag = res.get("tag", "核心精选")
+                highlight_word = res.get("highlight_word", quote[:2] if len(quote)>=2 else quote)
 
                 target_time = min(max(0.5, target_time), duration - 0.5)
 
@@ -206,7 +218,7 @@ if uploaded_file is not None and api_key:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("💡 诊断与原帧")
-                st.info(f"**金句**：{quote}\n\n**高亮词**：`{highlight_word}`")
+                st.info(f"**提炼金句**：{quote}\n\n**高亮发光词**：`{highlight_word}`")
                 st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒截图", use_container_width=True)
             with col2:
                 st.subheader("✨ 华丽爆款封面")
