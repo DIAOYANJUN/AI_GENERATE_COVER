@@ -82,7 +82,6 @@ if uploaded_file is not None and api_key:
                         timestamp_granularities=["segment"]
                     )
                 
-                # 解析提取真实带时间戳的字幕数据
                 raw_segments = getattr(transcription, "segments", [])
                 real_segments = []
                 for seg in raw_segments:
@@ -102,7 +101,6 @@ if uploaded_file is not None and api_key:
                     + "{\n"
                     + '    "golden_quote": "最刺激痛点或引发共鸣的金句（必须出自字幕原文，12-18字以内）",\n'
                     + '    "start_time": 对应这句话在视频中的开始时间秒数(float),\n'
-                    + '    "tag": "爆款分类标签（如：认知觉醒 / 商业逻辑 / 干货分享）",\n'
                     + '    "highlight_word": "金句中最核心需要高亮/发光的词语（2-4字）"\n'
                     + "}"
                 )
@@ -119,7 +117,6 @@ if uploaded_file is not None and api_key:
                 res = json.loads(response.choices[0].message.content)
                 quote = res.get("golden_quote", real_segments[0]["text"])
                 target_time = float(res.get("start_time", real_segments[0]["start"]))
-                tag = res.get("tag", "核心精选")
                 highlight_word = res.get("highlight_word", quote[:2] if len(quote)>=2 else quote)
 
                 target_time = min(max(0.5, target_time), duration - 0.5)
@@ -133,6 +130,7 @@ if uploaded_file is not None and api_key:
                     f'<span class="glow-word">{highlight_word}</span>'
                 )
 
+                # 修改后的精简纯英 HTML 特效模板
                 html_template = (
                     "<!DOCTYPE html>\n"
                     "<html>\n"
@@ -181,23 +179,23 @@ if uploaded_file is not None and api_key:
                     "        }\n"
                     "        .footer {\n"
                     "            position: relative; z-index: 2;\n"
-                    "            display: flex; justify-content: space-between; align-items: center;\n"
+                    "            display: flex; justify-content: flex-end; align-items: center;\n"
                     "            color: rgba(255, 255, 255, 0.7); font-size: 28px; font-weight: 600;\n"
                     "            border-top: 1px solid rgba(255, 255, 255, 0.2); padding-top: 40px;\n"
                     "        }\n"
                     "        .timestamp-badge {\n"
-                    "            background: rgba(0,0,0,0.5); padding: 8px 20px;\n"
-                    "            border-radius: 12px; color: #FFE600; font-family: monospace;\n"
+                    "            background: rgba(0,0,0,0.5); padding: 8px 24px;\n"
+                    "            border-radius: 12px; color: #FFE600; font-family: sans-serif;\n"
+                    "            font-size: 32px; font-weight: bold;\n"
                     "        }\n"
                     "    </style>\n"
                     "</head>\n"
                     "<body>\n"
                     '    <div class="overlay"></div>\n'
-                    '    <div class="header"><div class="tag"># ' + str(tag) + '</div></div>\n'
+                    '    <div class="header"><div class="tag">How can we</div></div>\n'
                     '    <div class="card-container"><div class="quote-text">“' + str(formatted_quote) + '”</div></div>\n'
                     '    <div class="footer">\n'
-                    '        <span>⚡ AI 时间戳同步生成</span>\n'
-                    '        <span class="timestamp-badge">帧对齐: ' + f"{target_time:.1f}" + 's</span>\n'
+                    '        <span class="timestamp-badge">NICE</span>\n'
                     '    </div>\n'
                     "</body>\n"
                     "</html>"
