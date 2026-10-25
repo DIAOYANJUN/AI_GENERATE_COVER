@@ -28,17 +28,31 @@ st.sidebar.header("🔑 API 配置")
 api_key = st.sidebar.text_input("Groq API Key", type="password", help="请在此处输入你的 Groq API Key")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
-model_choice = st.sidebar.selectbox(
-    "选择 Groq AI 模型",
-    [
-        "llama-3.1-8b-instant",       # 默认：极速可用
-        "llama-3.1-70b-versatile",     # 高质量模型
-        "llama3-8b-8192", 
-        "llama3-70b-8192", 
-        "mixtral-8x7b-32768"
-    ],
-    index=0
-)
+# 动态获取 Groq 账号可用的模型列表，防死板报错
+available_models = []
+if api_key:
+    try:
+        temp_client = OpenAI(api_key=api_key, base_url=base_url)
+        models_res = temp_client.models.list()
+        # 过滤出文本对话类模型
+        available_models = [
+            m.id for m in models_res.data 
+            if "whisper" not in m.id and "safetensors" not in m.id
+        ]
+    except Exception:
+        pass
+
+if not available_models:
+    available_models = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "llama-3.2-3b-preview",
+        "gemma2-9b-it"
+    ]
+
+selected_model = st.sidebar.selectbox("选择当前 Key 可用的 AI 模型", available_models, index=0)
+custom_model = st.sidebar.text_input("或手动填写模型 ID（留空使用上方选择）", value="")
+final_model = custom_model.strip() if custom_model.strip() else selected_model
 
 uploaded_file = st.file_uploader("上传短视频文件 (MP4 / MOV)", type=["mp4", "mov"])
 
@@ -65,7 +79,7 @@ if uploaded_file is not None and api_key:
                     {"start": 9.5, "end": 13.0, "text": "一个人加一套极速交付流程，你就能成为一家高效运行的公司。"}
                 ]
 
-            with st.spinner(f"3/4 大模型 ({model_choice}) 提炼金句并匹配精准画面时间戳..."):
+            with st.spinner(f"3/4 大模型 ({final_model}) 提炼金句并匹配精准画面时间戳..."):
                 prompt = (
                     "你是一个社媒爆款标题专家。请分析以下带时间戳的视频字幕，挑选出最震撼、最能拉满点击率的 1 句金句。\n"
                     + f"字幕数据：{json.dumps(mock_segments, ensure_ascii=False)}\n\n"
@@ -79,7 +93,7 @@ if uploaded_file is not None and api_key:
                 )
 
                 response = client.chat.completions.create(
-                    model=model_choice,
+                    model=final_model,
                     messages=[{"role": "user", "content": prompt}],
                     response_format={"type": "json_object"}
                 )
@@ -90,7 +104,6 @@ if uploaded_file is not None and api_key:
                 tag = res.get("tag", "认知觉醒")
                 highlight_word = res.get("highlight_word", "杠杆")
 
-                # 纠正并确保完整闭合：界定时间在 0.5s 到 (视频总长 - 0.5s) 之间
                 target_time = min(max(0.5, target_time), duration - 0.5)
 
                 video.save_frame("temp_frame.jpg", t=target_time)
