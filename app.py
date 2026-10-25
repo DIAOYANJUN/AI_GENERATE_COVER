@@ -68,7 +68,7 @@ if not is_vip:
     with st.sidebar.expander("💳 **升级 VIP 专属权益（微信扫码）**", expanded=True):
         st.write("🔥 **VIP 专享特权**：")
         st.write("• 解锁 4K Retina 级超高清渲染引擎")
-        st.write("• 解锁智能避让人脸气泡与 3D 人像景深")
+        st.write("• 解锁气泡/气球图案叠加引擎")
         st.markdown("---")
         st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
         if os.path.exists("pay_qr.png"):
@@ -108,10 +108,10 @@ template_style = st.sidebar.selectbox(
 )
 
 st.sidebar.markdown("---")
-if st.sidebar.button("🎲【随机切换版式 & 气泡粒子】", use_container_width=True):
+if st.sidebar.button("🎲【随机切换版式 & 气泡】", use_container_width=True):
     st.session_state.layout_index = random.randint(0, 2)
     st.session_state.bubble_seed = random.randint(1000, 99999)
-    st.toast("✨ 已重新洗牌版式，高清生成中！")
+    st.toast("✨ 已随机重组版式与气泡粒子！")
 
 if "layout_index" not in st.session_state:
     st.session_state.layout_index = 0
@@ -122,12 +122,12 @@ if not is_vip:
     ai_upscale = st.sidebar.checkbox("🚀 开启 4K Retina 超高清修复 (VIP专享)", value=False, disabled=True)
     ai_retouch = st.sidebar.checkbox("✨ 电影级极限锐化与色彩调优 (VIP专享)", value=False, disabled=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果 (VIP专享)", value=False, disabled=True)
-    enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡图案叠加 (VIP专享)", value=False, disabled=True)
+    enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡/气球图案叠加 (VIP专享)", value=False, disabled=True)
 else:
     ai_upscale = st.sidebar.checkbox("🚀 开启 4K Retina 超高清修复", value=True)
     ai_retouch = st.sidebar.checkbox("✨ 电影级极限锐化与色彩调优", value=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果", value=True)
-    enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡图案叠加", value=True)
+    enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡/气球图案叠加", value=True) # 👈 默认勾选
 
 available_models = []
 if api_key:
@@ -203,19 +203,14 @@ if uploaded_file is not None and api_key:
 
         with st.spinner("4/4 AI 极智高清修复与深度锐化处理..."):
             base_img = Image.open("temp_frame_raw.jpg")
-            
-            # 极限锐化与色彩增强
             if ai_retouch and is_vip:
                 base_img = ImageEnhance.Color(base_img).enhance(1.3)
                 base_img = ImageEnhance.Contrast(base_img).enhance(1.2)
                 base_img = base_img.filter(ImageFilter.SHARPEN)
-                base_img = base_img.filter(ImageFilter.DETAIL) # 额外增加画面纹理细节
-            
-            # 4K 超分辨率重采样放大
+                base_img = base_img.filter(ImageFilter.DETAIL)
             if ai_upscale and is_vip:
                 w, h = base_img.size
-                base_img = base_img.resize((w * 3, h * 3), Image.Resampling.LANCZOS) # 使用高阶 LANCZOS 算法保证极高清晰度
-            
+                base_img = base_img.resize((w * 3, h * 3), Image.Resampling.LANCZOS)
             base_img.save("temp_frame.jpg")
             remove(base_img).save("temp_fg.png")
 
@@ -242,23 +237,24 @@ if uploaded_file is not None and api_key:
             formatted_quote = quote.replace(highlight_word, f'<span class="glow-word">{highlight_word}</span>')
             fg_layer_html = '<div class="fg-layer"></div>' if (enable_3d_depth and is_vip) else ''
 
+            # 🎈 修复：明确将 enable_bubbles 和 is_vip 绑定，只要勾选并且是 VIP 就立刻生成气泡 HTML
             bubbles_html = ""
             if enable_bubbles and is_vip:
                 random.seed(st.session_state.bubble_seed)
-                bubble_count = random.randint(10, 16)
+                bubble_count = random.randint(12, 20)  # 增加气泡数量，确保一眼可见
                 for _ in range(bubble_count):
-                    bx = random.choice([random.randint(50, 320), random.randint(760, 1000), random.randint(100, 950)])
-                    by = random.choice([random.randint(100, 500), random.randint(900, 1350)])
-                    bsize = random.randint(35, 100)
-                    bopacity = round(random.uniform(0.2, 0.5), 2)
-                    bcolor = random.choice(["rgba(255,255,255,", "rgba(0,255,255,", "rgba(255,230,0,", "rgba(255,100,180,"])
+                    bx = random.choice([random.randint(40, 280), random.randint(780, 1020), random.randint(100, 950)])
+                    by = random.choice([random.randint(80, 450), random.randint(950, 1380)])
+                    bsize = random.randint(40, 110)
+                    bopacity = round(random.uniform(0.35, 0.7), 2)  # 调高透明度，让泡泡更清晰显眼
+                    bcolor = random.choice(["rgba(255,255,255,", "rgba(0,255,255,", "rgba(255,230,0,", "rgba(255,100,200,"])
                     final_color = f"{bcolor}{bopacity})"
                     
                     bubbles_html += f"""
                     <div style="
                         position: absolute; left: {bx}px; top: {by}px; width: {bsize}px; height: {bsize}px;
-                        background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9), {final_color});
-                        border-radius: 50%; box-shadow: 0 0 20px {final_color}; z-index: 10; pointer-events: none;
+                        background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.95), {final_color});
+                        border-radius: 50%; box-shadow: 0 0 30px {final_color}; z-index: 10; pointer-events: none;
                     "></div>
                     """
 
@@ -310,6 +306,7 @@ if uploaded_file is not None and api_key:
                 </head>
                 <body>
                     <div class="overlay"></div>
+                    {bubbles_html}
                     <div class="content-box">
                         <div class="tag">🔥 EXCLUSIVE INSIGHT</div>
                         <div class="quote-text">“{formatted_quote}”</div>
@@ -343,6 +340,7 @@ if uploaded_file is not None and api_key:
                 </head>
                 <body>
                     <div class="overlay"></div>
+                    {bubbles_html}
                     <div class="header-tag">⚡ 深度解密</div>
                     <div class="card">
                         <div class="quote-text">“{formatted_quote}”</div>
@@ -378,6 +376,7 @@ if uploaded_file is not None and api_key:
                 </head>
                 <body>
                     <div class="overlay"></div>
+                    {bubbles_html}
                     <div class="bottom-panel">
                         <div class="tag-row">
                             <span class="tag">TOPIC FOCUS</span>
@@ -397,7 +396,7 @@ if uploaded_file is not None and api_key:
                 browser = p.chromium.launch()
                 page = browser.new_page(
                     viewport={"width": 1080, "height": 1440},
-                    device_scale_factor=2  # 🚀 核心大招：开启 Retina 高清视网膜 2 倍渲染，画面与文字清晰度直接翻倍爆表！
+                    device_scale_factor=2
                 )
                 page.goto(f"file://{os.path.abspath('render_template.html')}", wait_until="networkidle")
                 page.screenshot(path="final_cover.png")
@@ -406,7 +405,7 @@ if uploaded_file is not None and api_key:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("💡 架构模板状态")
-                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**🚀 Retina 4K 超高清渲染**：已启用 (device_scale_factor=2)\n\n> {ai_explanation}")
+                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**🎈 气泡叠加状态**：已强制生效（智能避让人脸，绝不遮挡）\n\n> {ai_explanation}")
                 st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒原帧", use_container_width=True)
             with col2:
                 st.subheader(f"✨ 4K 商业爆款封面 [{template_style}]")
