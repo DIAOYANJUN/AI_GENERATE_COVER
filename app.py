@@ -7,7 +7,7 @@ import random
 from moviepy import VideoFileClip
 from openai import OpenAI
 from rembg import remove
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter, ImageDraw
 
 # ---------------- 0. 用户系统与 VIP 权限配置 ----------------
 st.set_page_config(page_title="AI 商业级爆款封面生成器", layout="wide", page_icon="🎬")
@@ -67,7 +67,7 @@ st.sidebar.markdown(f"**当前登录**：`{st.session_state.get('username')}` ({
 if not is_vip:
     with st.sidebar.expander("💳 **升级 VIP 专属权益（微信扫码）**", expanded=True):
         st.write("🔥 **VIP 专享特权**：")
-        st.write("• 解锁 **AI 智能异性搭档陪伴合成**")
+        st.write("• 解锁 **随机超级美女搭档智能合成引擎**")
         st.write("• 解锁 4K Retina 超高清修复与智能气泡")
         st.markdown("---")
         st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
@@ -108,27 +108,30 @@ template_style = st.sidebar.selectbox(
 )
 
 st.sidebar.markdown("---")
-if st.sidebar.button("🎲【随机切换版式 & 气泡】", use_container_width=True):
+if st.sidebar.button("🎲【随机切换版式 & 随机超级美女】", use_container_width=True):
     st.session_state.layout_index = random.randint(0, 2)
     st.session_state.bubble_seed = random.randint(1000, 99999)
-    st.toast("✨ 已随机重组版式！")
+    st.session_state.beauty_seed = random.randint(1, 100) # 触发更换随机美女
+    st.toast("✨ 已随机切换版式并更换了一位超级美女搭档！")
 
 if "layout_index" not in st.session_state:
     st.session_state.layout_index = 0
 if "bubble_seed" not in st.session_state:
     st.session_state.bubble_seed = 42
+if "beauty_seed" not in st.session_state:
+    st.session_state.beauty_seed = 1
 
 if not is_vip:
     ai_upscale = st.sidebar.checkbox("🚀 开启 4K Retina 超高清修复 (VIP专享)", value=False, disabled=True)
     ai_retouch = st.sidebar.checkbox("✨ 电影级极限锐化与色彩调优 (VIP专享)", value=False, disabled=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果 (VIP专享)", value=False, disabled=True)
-    enable_partner = st.sidebar.checkbox("👫 开启 AI 智能陪伴（旁边加入异性搭档） (VIP专享)", value=False, disabled=True)
+    enable_partner = st.sidebar.checkbox("👩‍🦰 开启 AI 随机超级美女搭档陪伴 (VIP专享)", value=False, disabled=True)
     enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡图案叠加 (VIP专享)", value=False, disabled=True)
 else:
     ai_upscale = st.sidebar.checkbox("🚀 开启 4K Retina 超高清修复", value=True)
     ai_retouch = st.sidebar.checkbox("✨ 电影级极限锐化与色彩调优", value=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果", value=True)
-    enable_partner = st.sidebar.checkbox("👫 开启 AI 智能陪伴（旁边加入异性搭档）", value=True) # 👈 默认勾选体验
+    enable_partner = st.sidebar.checkbox("👩‍🦰 开启 AI 随机超级美女搭档陪伴", value=True)
     enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡图案叠加", value=True)
 
 available_models = []
@@ -203,7 +206,7 @@ if uploaded_file is not None and api_key:
             video.save_frame("temp_frame_raw.jpg", t=target_time)
             video.close()
 
-        with st.spinner("4/4 AI 极智高清修复与搭档合成预处理..."):
+        with st.spinner("4/4 AI 极智高清修复与随机超级美女搭档合成..."):
             base_img = Image.open("temp_frame_raw.jpg")
             if ai_retouch and is_vip:
                 base_img = ImageEnhance.Color(base_img).enhance(1.3)
@@ -215,27 +218,49 @@ if uploaded_file is not None and api_key:
                 base_img = base_img.resize((w * 3, h * 3), Image.Resampling.LANCZOS)
             base_img.save("temp_frame.jpg")
 
-            # 主理人抠图
             main_fg = remove(base_img)
             
-            # 👫 如果开启了异性搭档陪伴功能：我们在旁边合成一个精修的异性伴侣半身图层
+            # 👩‍🦰 随机超级美女搭档生成引擎（网络高清视觉美图直连或智能艺术合成）
             if enable_partner and is_vip:
-                # 检查本地是否有 partner.png（如果没有，程序自动生成一个占位高质量 AI 伴侣剪影或使用内置合成逻辑）
-                if not os.path.exists("partner.png"):
-                    # 自动创建一个高质量的伴侣半身透明图层作为备用
-                    partner_img = Image.new("RGBA", (500, 800), (0, 0, 0, 0))
-                    partner_img.save("partner.png")
-                
-                partner_fg = Image.open("partner.png").convert("RGBA")
-                # 将主理人与异性搭档进行双人画布合成
                 combined_fg = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
-                # 贴入主理人
                 combined_fg.paste(main_fg, (0, 0), main_fg)
-                # 在右侧或左侧精准并排贴入异性搭档
-                partner_resized = partner_fg.resize((int(base_img.width * 0.45), int(base_img.height * 0.7)), Image.Resampling.LANCZOS)
-                paste_x = int(base_img.width * 0.55)
-                paste_y = int(base_img.height * 0.3)
-                combined_fg.paste(partner_resized, (paste_x, paste_y), partner_resized)
+                
+                # 精选顶级时尚杂志感超级美女图片库（可随机切换）
+                beauty_urls = [
+                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80", # 绝美高级脸
+                    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=600&q=80", # 甜美元气少女
+                    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=600&q=80"  # 气场御姐
+                ]
+                
+                try:
+                    import urllib.request
+                    from io import BytesIO
+                    # 根据随机 seed 每次挑选不同风格的超级美女
+                    chosen_url = beauty_urls[st.session_state.beauty_seed % len(beauty_urls)]
+                    req = urllib.request.Request(chosen_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req) as resp:
+                        beauty_img = Image.open(BytesIO(resp.read())).convert("RGBA")
+                        # 高清抠图处理让美女完美融入
+                        beauty_fg = remove(beauty_img)
+                        # 缩放并并肩贴在右侧
+                        bw = int(base_img.width * 0.42)
+                        bh = int(base_img.height * 0.7)
+                        beauty_resized = beauty_fg.resize((bw, bh), Image.Resampling.LANCZOS)
+                        paste_x = int(base_img.width * 0.56)
+                        paste_y = int(base_img.height * 0.28)
+                        combined_fg.paste(beauty_resized, (paste_x, paste_y), beauty_resized)
+                except Exception:
+                    # 备用降级方案：若网络不通自动绘制高级艺术虚化剪影
+                    partner_w = int(base_img.width * 0.4)
+                    partner_h = int(base_img.height * 0.65)
+                    partner_img = Image.new("RGBA", (partner_w, partner_h), (0, 0, 0, 0))
+                    p_draw = ImageDraw.Draw(partner_img)
+                    p_draw.ellipse([partner_w//4, 20, partner_w*3//4, partner_w//2 + 20], fill=(255, 200, 220, 240))
+                    p_draw.rounded_rectangle([20, partner_w//2, partner_w - 20, partner_h], radius=40, fill=(255, 105, 180, 220))
+                    paste_x = int(base_img.width * 0.58)
+                    paste_y = int(base_img.height * 0.35)
+                    combined_fg.paste(partner_img, (paste_x, paste_y), partner_img)
+
                 combined_fg.save("temp_fg.png")
             else:
                 main_fg.save("temp_fg.png")
@@ -246,7 +271,7 @@ if uploaded_file is not None and api_key:
             "target_time": target_time,
             "ai_explanation": ai_explanation
         }
-        st.success("🎉 高清分析与搭档合成就绪！")
+        st.success("🎉 高清分析与随机超级美女搭档合成就绪！")
 
     if "analyzed_data" in st.session_state:
         data = st.session_state.analyzed_data
@@ -428,7 +453,7 @@ if uploaded_file is not None and api_key:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("💡 架构模板状态")
-                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**👫 异性搭档陪伴**：已开启合成\n\n> {ai_explanation}")
+                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**👩‍🦰 随机超级美女搭档**：已随机匹配并高清合成\n\n> {ai_explanation}")
                 st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒原帧", use_container_width=True)
             with col2:
                 st.subheader(f"✨ 4K 商业爆款封面 [{template_style}]")
