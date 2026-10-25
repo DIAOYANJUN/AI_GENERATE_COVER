@@ -1,0 +1,16 @@
+# Python 编译文件
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# 运行过程中产生的临时媒体文件（绝对不能传到 GitHub）
+temp_*
+*.mp3
+*.mp4
+*.png
+*.jpg
+*.html
+output_*
+final_cover.png

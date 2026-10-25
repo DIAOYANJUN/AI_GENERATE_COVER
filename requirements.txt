@@ -1,0 +1,6 @@
+streamlit
+moviepy
+openai
+playwright
+opencv-python-headless
+pillow
