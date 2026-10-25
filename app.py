@@ -28,18 +28,22 @@ st.sidebar.header("🔑 API 配置")
 api_key = st.sidebar.text_input("Groq API Key", type="password", help="请在此处输入你的 Groq API Key")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
-# 动态获取 Groq 账号可用的生成式对话模型
+# 动态获取 Groq 账号可用的生成式对话模型（自动过滤需协议授权的第三方/分类/语音模型）
 available_models = []
 if api_key:
     try:
         temp_client = OpenAI(api_key=api_key, base_url=base_url)
         models_res = temp_client.models.list()
         
-        banned_keywords = ["whisper", "safetensors", "guard", "embedding", "moderation"]
+        # 扩展黑名单：过滤非对话类、需特殊协议及安全分类模型
+        banned_keywords = ["whisper", "safetensors", "guard", "embedding", "moderation", "canopylabs", "orpheus", "tts"]
+        
         available_models = [
             m.id for m in models_res.data 
             if not any(k in m.id.lower() for k in banned_keywords)
         ]
+        # 优先将官方推荐的 llama 模型排在前面
+        available_models.sort(key=lambda x: 0 if "llama" in x.lower() else 1)
     except Exception:
         pass
 
@@ -130,7 +134,6 @@ if uploaded_file is not None and api_key:
                     f'<span class="glow-word">{highlight_word}</span>'
                 )
 
-                # 修改后的精简纯英 HTML 特效模板
                 html_template = (
                     "<!DOCTYPE html>\n"
                     "<html>\n"
