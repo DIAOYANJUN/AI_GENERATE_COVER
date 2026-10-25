@@ -28,16 +28,19 @@ st.sidebar.header("🔑 API 配置")
 api_key = st.sidebar.text_input("Groq API Key", type="password", help="请在此处输入你的 Groq API Key")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
-# 动态获取 Groq 账号可用的模型列表，防死板报错
+# 动态获取 Groq 账号可用的生成式对话模型（自动过滤 guard/whisper/分类模型）
 available_models = []
 if api_key:
     try:
         temp_client = OpenAI(api_key=api_key, base_url=base_url)
         models_res = temp_client.models.list()
-        # 过滤出文本对话类模型
+        
+        # 黑名单关键词：过滤掉非对话类及安全分类模型
+        banned_keywords = ["whisper", "safetensors", "guard", "embedding", "moderation"]
+        
         available_models = [
             m.id for m in models_res.data 
-            if "whisper" not in m.id and "safetensors" not in m.id
+            if not any(k in m.id.lower() for k in banned_keywords)
         ]
     except Exception:
         pass
@@ -50,7 +53,7 @@ if not available_models:
         "gemma2-9b-it"
     ]
 
-selected_model = st.sidebar.selectbox("选择当前 Key 可用的 AI 模型", available_models, index=0)
+selected_model = st.sidebar.selectbox("选择 Groq AI 对话模型", available_models, index=0)
 custom_model = st.sidebar.text_input("或手动填写模型 ID（留空使用上方选择）", value="")
 final_model = custom_model.strip() if custom_model.strip() else selected_model
 
@@ -94,7 +97,10 @@ if uploaded_file is not None and api_key:
 
                 response = client.chat.completions.create(
                     model=final_model,
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that outputs raw JSON."},
+                        {"role": "user", "content": prompt}
+                    ],
                     response_format={"type": "json_object"}
                 )
 
