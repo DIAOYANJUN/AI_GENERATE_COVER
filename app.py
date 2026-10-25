@@ -3,6 +3,7 @@ import os
 import json
 import subprocess
 import time
+import random
 from moviepy import VideoFileClip
 from openai import OpenAI
 from rembg import remove
@@ -74,6 +75,7 @@ if not is_vip:
         st.write("🔥 **VIP 专享特权**：")
         st.write("• 解锁小红书爆款 👑 VIP 高对比度配色")
         st.write("• 解锁 3D 人像景深穿插海报特效")
+        st.write("• 解锁**随机防同质化多变排版引擎**")
         
         st.markdown("---")
         st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
@@ -117,7 +119,7 @@ st.sidebar.header("🔑 API 配置")
 api_key = st.sidebar.text_input("Groq API Key", type="password")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
-st.sidebar.header("🎨 封面视觉设计（支持实时响应）")
+st.sidebar.header("🎨 封面视觉设计（实时响应）")
 
 template_style = st.sidebar.selectbox(
     "选择封面视觉风格",
@@ -130,11 +132,13 @@ template_style = st.sidebar.selectbox(
     index=0
 )
 
-# 💡 将这两个控件设为实时响应控件（不放在生成按钮内部，只要变动就会触发页面重跑渲染）
 if not is_vip:
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡/文字后置效果 (VIP 专享)", value=False, disabled=True)
 else:
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡/文字后置效果", value=True)
+
+# 💡 新增：防同质化随机变体开关
+randomize_layout = st.sidebar.checkbox("🎲 随机防同质化排版（每次生成不同布局）", value=True)
 
 # 动态获取模型
 available_models = []
@@ -155,10 +159,8 @@ selected_model = st.sidebar.selectbox("选择 Groq AI 对话模型", available_m
 
 uploaded_file = st.file_uploader("上传短视频文件 (MP4 / MOV)", type=["mp4", "mov"])
 
-# ---------------- 3. 会话状态缓存与主渲染函数 ----------------
-# 如果已经分析过视频并生成了基础数据，将其存入 st.session_state 避免重复调用耗时的 Whisper 和 LLM
+# ---------------- 3. 核心逻辑与实时渲染 ----------------
 if uploaded_file is not None and api_key:
-    # 仅当上传新视频或尚未解析时才运行重型任务
     if "analyzed_data" not in st.session_state or st.session_state.get("last_file") != uploaded_file.name:
         with open("temp_video.mp4", "wb") as f:
             f.write(uploaded_file.read())
@@ -226,13 +228,11 @@ if uploaded_file is not None and api_key:
             video.save_frame("temp_frame.jpg", t=target_time)
             video.close()
 
-        # 提前做一次 AI 抠图备用
         with st.spinner("4/4 正在预处理 AI 人像扣图层..."):
             input_img = Image.open("temp_frame.jpg")
             output_img = remove(input_img)
             output_img.save("temp_fg.png")
 
-        # 将解析结果存入内存
         st.session_state.analyzed_data = {
             "quote": quote,
             "highlight_word": highlight_word,
@@ -240,9 +240,9 @@ if uploaded_file is not None and api_key:
             "ai_explanation": ai_explanation,
             "duration": duration
         }
-        st.success("🎉 视频分析与抠图准备就绪！现在你可以**实时勾选后置效果或切换风格**查看变化。")
+        st.success("🎉 视频分析就绪！你可以随时勾选 3D 效果、切换排版和风格，页面会瞬间实时刷新！")
 
-    # 如果已经解析完毕，每次侧边栏勾选变化时，直接执行极速渲染（无需重新上传和调用 AI 分析）
+    # 实时响应渲染区块
     if "analyzed_data" in st.session_state:
         data = st.session_state.analyzed_data
         quote = data["quote"]
@@ -255,13 +255,19 @@ if uploaded_file is not None and api_key:
             st.stop()
 
         try:
-            # 动态控制抠图图层是否加载
-            fg_layer_html = '<div class="fg-layer"></div>' if (enable_3d_depth and is_vip) else ''
+            # 🎲 随机防同质化引擎：每次渲染随机分配对齐方式、圆角和轻微倾斜角度
+            if randomize_layout:
+                flex_aligns = ["flex-start", "center", "flex-end"]
+                card_align = random.choice(flex_aligns)
+                border_radius_val = random.choice(["20px", "40px", "60px", "24px"])
+                rotate_val = random.choice([-1.5, 0, 1.2, 0]) # 微弱倾斜，打破死板
+            else:
+                card_align = "flex-start"
+                border_radius_val = "40px"
+                rotate_val = 0
 
-            formatted_quote = quote.replace(
-                highlight_word, 
-                f'<span class="glow-word">{highlight_word}</span>'
-            )
+            fg_layer_html = '<div class="fg-layer"></div>' if (enable_3d_depth and is_vip) else ''
+            formatted_quote = quote.replace(highlight_word, f'<span class="glow-word">{highlight_word}</span>')
 
             if "Cyber" in template_style:
                 font_import = "@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@800;900&family=Noto+Sans+SC:wght@900&display=swap');"
@@ -317,7 +323,7 @@ if uploaded_file is not None and api_key:
                 "            backdrop-filter: blur(4px);\n"
                 "            z-index: 1;\n"
                 "        }\n"
-                "        .header { position: relative; z-index: 2; }\n"
+                "        .header { position: relative; z-index: 2; align-self: " + card_align + "; }\n"
                 "        .tag {\n"
                 "            display: inline-block;\n"
                 "            background: " + badge_bg + ";\n"
@@ -329,9 +335,10 @@ if uploaded_file is not None and api_key:
                 "            position: relative; z-index: 2;\n"
                 "            background: " + card_bg + ";\n"
                 "            border: 2px solid " + border_color + ";\n"
-                "            border-radius: 40px; padding: 65px 50px;\n"
+                "            border-radius: " + border_radius_val + "; padding: 65px 50px;\n"
                 "            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6);\n"
                 "            backdrop-filter: blur(14px);\n"
+                "            transform: rotate(" + str(rotate_val) + "deg);\n"
                 "        }\n"
                 "        .quote-text {\n"
                 "            color: #FFFFFF; font-size: 76px; font-weight: 900;\n"
@@ -363,10 +370,10 @@ if uploaded_file is not None and api_key:
                 "</head>\n"
                 "<body>\n"
                 '    <div class="overlay"></div>\n'
-                '    <div class="header"><div class="tag">How can we</div></div>\n'
+                '    <div class="header"><div class="tag">HOT TOPIC</div></div>\n'
                 '    <div class="card-container"><div class="quote-text">“' + str(formatted_quote) + '”</div></div>\n'
                 + fg_layer_html + "\n"
-                '    <div class="footer"><span class="badge">NICE</span></div>\n'
+                '    <div class="footer"><span class="badge">FRENK AI</span></div>\n'
                 "</body>\n"
                 "</html>"
             )
