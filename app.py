@@ -3,7 +3,7 @@ import os
 import json
 import subprocess
 import cv2
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 from openai import OpenAI
 
 # ---------------- 1. 云端环境自愈（自动补全 Playwright Chromium 内核） ----------------
