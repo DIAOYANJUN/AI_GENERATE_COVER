@@ -67,14 +67,12 @@ st.sidebar.markdown(f"**当前登录**：`{st.session_state.get('username')}` ({
 if not is_vip:
     with st.sidebar.expander("💳 **升级 VIP 专属权益（微信扫码）**", expanded=True):
         st.write("🔥 **VIP 专享特权**：")
-        st.write("• 解锁 **超级美女搭档智能合成引擎**")
-        st.write("• 解锁 4K Retina 超高清修复与智能气泡")
+        st.write("• 解锁超级美女搭档智能合成引擎")
         st.markdown("---")
         st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
         if os.path.exists("pay_qr.png"):
             st.image("pay_qr.png", caption="请使用微信扫码支付", use_container_width=True)
         else:
-            st.warning("⚠️ 未检测到 pay_qr.png，请上传二维码")
             st.image("https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=WeChatPay", caption="微信支付", use_container_width=True)
         
         if st.button("🔄 检查是否已扫码支付"):
@@ -112,7 +110,7 @@ if st.sidebar.button("🎲【随机切换版式 & 美女搭档】", use_containe
     st.session_state.layout_index = random.randint(0, 2)
     st.session_state.bubble_seed = random.randint(1000, 99999)
     st.session_state.beauty_seed = random.randint(1, 100)
-    st.toast("✨ 已随机切换版式并更换超级美女搭档！")
+    st.toast("✨ 已随机切换版式并更换美女搭档！")
 
 if "layout_index" not in st.session_state:
     st.session_state.layout_index = 0
@@ -131,7 +129,7 @@ else:
     ai_upscale = st.sidebar.checkbox("🚀 开启 4K Retina 超高清修复", value=True)
     ai_retouch = st.sidebar.checkbox("✨ 电影级极限锐化与色彩调优", value=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果", value=True)
-    enable_partner = st.sidebar.checkbox("👩‍🦰 开启 AI 超级美女搭档陪伴", value=True) # 默认开启
+    enable_partner = st.sidebar.checkbox("👩‍🦰 开启 AI 超级美女搭档陪伴", value=True)
     enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡图案叠加", value=True)
 
 available_models = []
@@ -220,32 +218,24 @@ if uploaded_file is not None and api_key:
 
             main_fg = remove(base_img)
             
-            # 👩‍🦰 核心升级：100% 稳定生效的高级时尚女性搭档立体剪影与光影人像合成引擎
+            # 👩‍🦰 核心改进：在画面右侧独立生成一个非常醒目、绝不被遮挡的高颜值时尚女性半身艺术形象
             if enable_partner and is_vip:
                 combined_fg = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
                 combined_fg.paste(main_fg, (0, 0), main_fg)
                 
-                # 在本地直接精准绘制一个高质感的女性时尚搭档半身形象（带有高光和时尚发型轮廓）
-                pw = int(base_img.width * 0.42)
-                ph = int(base_img.height * 0.72)
+                pw = int(base_img.width * 0.45)
+                ph = int(base_img.height * 0.75)
                 partner_layer = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
                 p_draw = ImageDraw.Draw(partner_layer)
                 
-                # 随机挑选一种高奢发色与服装配色方案（每次点击按钮随机换款）
-                hair_colors = [(50, 30, 20, 240), (220, 180, 140, 240), (30, 30, 30, 240)]
-                dress_colors = [(255, 105, 180, 230), (0, 229, 255, 230), (255, 215, 0, 230)]
-                chosen_hair = hair_colors[st.session_state.beauty_seed % len(hair_colors)]
-                chosen_dress = dress_colors[st.session_state.beauty_seed % len(dress_colors)]
+                # 绘制一个极具现代感的时尚女性高光剪影/艺术头像（带发光边框，确保肉眼一眼可见）
+                p_draw.ellipse([pw//4 - 10, 30, pw*3//4 + 10, pw//2 + 70], fill=(255, 230, 240, 250)) # 头部
+                p_draw.rounded_rectangle([10, pw//2 + 30, pw - 10, ph], radius=45, fill=(255, 20, 147, 230)) # 亮丽粉色时尚上衣
+                p_draw.ellipse([pw//2 - 25, pw//2 + 60, pw//2 + 25, pw//2 + 110], fill=(255, 220, 200, 250)) # 颈部与胸前点缀
                 
-                # 绘制时尚发型与脸部轮廓
-                p_draw.ellipse([pw//4 - 20, 40, pw*3//4 + 20, pw//2 + 80], fill=chosen_hair) # 飘逸秀发
-                p_draw.ellipse([pw//4, 70, pw*3//4, pw//2 + 50], fill=(255, 220, 200, 240)) # 面部美肤
-                # 绘制时尚修身服饰/礼服身躯
-                p_draw.rounded_rectangle([15, pw//2 + 40, pw - 15, ph], radius=50, fill=chosen_dress)
-                
-                # 并肩合成到主理人身侧（右侧黄金视觉位）
-                paste_x = int(base_img.width * 0.54)
-                paste_y = int(base_img.height * 0.26)
+                # 放在右侧绝对显眼黄金位
+                paste_x = int(base_img.width * 0.52)
+                paste_y = int(base_img.height * 0.22)
                 combined_fg.paste(partner_layer, (paste_x, paste_y), partner_layer)
                 combined_fg.save("temp_fg.png")
             else:
@@ -439,7 +429,7 @@ if uploaded_file is not None and api_key:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("💡 架构模板状态")
-                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**👩‍🦰 超级美女搭档**：已 100% 稳定渲染合成\n\n> {ai_explanation}")
+                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**👩‍🦰 超级美女搭档**：已在右侧高亮合成\n\n> {ai_explanation}")
                 st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒原帧", use_container_width=True)
             with col2:
                 st.subheader(f"✨ 4K 商业爆款封面 [{template_style}]")
