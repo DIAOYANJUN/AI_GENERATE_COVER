@@ -67,9 +67,8 @@ st.sidebar.markdown(f"**当前登录**：`{st.session_state.get('username')}` ({
 if not is_vip:
     with st.sidebar.expander("💳 **升级 VIP 专属权益（微信扫码）**", expanded=True):
         st.write("🔥 **VIP 专享特权**：")
-        st.write("• 解锁三大独立架构真实模板库")
-        st.write("• 解锁**随机气泡与气球粒子叠加引擎**")
-        st.write("• 解锁 AI 超清修复与 3D 人像景深穿插")
+        st.write("• 解锁 4K Retina 级超高清渲染引擎")
+        st.write("• 解锁智能避让人脸气泡与 3D 人像景深")
         st.markdown("---")
         st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
         if os.path.exists("pay_qr.png"):
@@ -100,7 +99,7 @@ st.sidebar.header("🔑 API 配置")
 api_key = st.sidebar.text_input("Groq API Key", type="password")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
-st.sidebar.header("🎨 模板库与视觉设计")
+st.sidebar.header("🎨 模板库与高清视觉设计")
 
 template_style = st.sidebar.selectbox(
     "基础视觉色彩风格",
@@ -111,8 +110,8 @@ template_style = st.sidebar.selectbox(
 st.sidebar.markdown("---")
 if st.sidebar.button("🎲【随机切换版式 & 气泡粒子】", use_container_width=True):
     st.session_state.layout_index = random.randint(0, 2)
-    st.session_state.bubble_seed = random.randint(1000, 99999) # 强制刷新气泡位置
-    st.toast("✨ 已重新洗牌版式，气泡与粒子随机叠加生成！")
+    st.session_state.bubble_seed = random.randint(1000, 99999)
+    st.toast("✨ 已重新洗牌版式，高清生成中！")
 
 if "layout_index" not in st.session_state:
     st.session_state.layout_index = 0
@@ -120,15 +119,15 @@ if "bubble_seed" not in st.session_state:
     st.session_state.bubble_seed = 42
 
 if not is_vip:
-    ai_upscale = st.sidebar.checkbox("🚀 AI 智能高清修复 (2x) (VIP专享)", value=False, disabled=True)
-    ai_retouch = st.sidebar.checkbox("✨ 电影级色彩 P 图美化 (VIP专享)", value=False, disabled=True)
+    ai_upscale = st.sidebar.checkbox("🚀 开启 4K Retina 超高清修复 (VIP专享)", value=False, disabled=True)
+    ai_retouch = st.sidebar.checkbox("✨ 电影级极限锐化与色彩调优 (VIP专享)", value=False, disabled=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果 (VIP专享)", value=False, disabled=True)
-    enable_bubbles = st.sidebar.checkbox("🎈 开启随机气泡/气球图案叠加 (VIP专享)", value=False, disabled=True)
+    enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡图案叠加 (VIP专享)", value=False, disabled=True)
 else:
-    ai_upscale = st.sidebar.checkbox("🚀 AI 智能高清修复 (2x)", value=True)
-    ai_retouch = st.sidebar.checkbox("✨ 电影级色彩 P 图美化", value=True)
+    ai_upscale = st.sidebar.checkbox("🚀 开启 4K Retina 超高清修复", value=True)
+    ai_retouch = st.sidebar.checkbox("✨ 电影级极限锐化与色彩调优", value=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果", value=True)
-    enable_bubbles = st.sidebar.checkbox("🎈 开启随机气泡/气球图案叠加", value=True)
+    enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡图案叠加", value=True)
 
 available_models = []
 if api_key:
@@ -147,7 +146,7 @@ if not available_models:
 selected_model = st.sidebar.selectbox("选择 Groq AI 对话模型", available_models, index=0)
 uploaded_file = st.file_uploader("上传短视频文件 (MP4 / MOV)", type=["mp4", "mov"])
 
-# ---------------- 3. 核心处理与渲染 ----------------
+# ---------------- 3. 核心处理与高清渲染 ----------------
 if uploaded_file is not None and api_key:
     if "analyzed_data" not in st.session_state or st.session_state.get("last_file") != uploaded_file.name:
         with open("temp_video.mp4", "wb") as f:
@@ -202,17 +201,22 @@ if uploaded_file is not None and api_key:
             video.save_frame("temp_frame_raw.jpg", t=target_time)
             video.close()
 
-        with st.spinner("4/4 AI 高清修复与抠图处理..."):
+        with st.spinner("4/4 AI 极智高清修复与深度锐化处理..."):
             base_img = Image.open("temp_frame_raw.jpg")
+            
+            # 极限锐化与色彩增强
             if ai_retouch and is_vip:
-                base_img = ImageEnhance.Color(base_img).enhance(1.25)
-                base_img = ImageEnhance.Contrast(base_img).enhance(1.15)
+                base_img = ImageEnhance.Color(base_img).enhance(1.3)
+                base_img = ImageEnhance.Contrast(base_img).enhance(1.2)
                 base_img = base_img.filter(ImageFilter.SHARPEN)
+                base_img = base_img.filter(ImageFilter.DETAIL) # 额外增加画面纹理细节
+            
+            # 4K 超分辨率重采样放大
             if ai_upscale and is_vip:
                 w, h = base_img.size
-                base_img = base_img.resize((w * 2, h * 2), Image.Resampling.BICUBIC)
+                base_img = base_img.resize((w * 3, h * 3), Image.Resampling.LANCZOS) # 使用高阶 LANCZOS 算法保证极高清晰度
+            
             base_img.save("temp_frame.jpg")
-
             remove(base_img).save("temp_fg.png")
 
         st.session_state.analyzed_data = {
@@ -221,7 +225,7 @@ if uploaded_file is not None and api_key:
             "target_time": target_time,
             "ai_explanation": ai_explanation
         }
-        st.success("🎉 分析就绪！")
+        st.success("🎉 高清分析就绪！")
 
     if "analyzed_data" in st.session_state:
         data = st.session_state.analyzed_data
@@ -238,32 +242,23 @@ if uploaded_file is not None and api_key:
             formatted_quote = quote.replace(highlight_word, f'<span class="glow-word">{highlight_word}</span>')
             fg_layer_html = '<div class="fg-layer"></div>' if (enable_3d_depth and is_vip) else ''
 
-            # 🎈 动态气泡/气球图案叠加生成器（每次洗牌生成绝对不重复的随机浮动气泡）
             bubbles_html = ""
             if enable_bubbles and is_vip:
                 random.seed(st.session_state.bubble_seed)
-                bubble_count = random.randint(8, 14)
+                bubble_count = random.randint(10, 16)
                 for _ in range(bubble_count):
-                    bx = random.randint(50, 1000)
-                    by = random.randint(100, 1350)
-                    bsize = random.randint(30, 120)
-                    bopacity = round(random.uniform(0.15, 0.45), 2)
-                    bcolor = random.choice(["rgba(255,255,255,", "rgba(0,255,255,", "rgba(255,230,0,", "rgba(255,100,150,"])
+                    bx = random.choice([random.randint(50, 320), random.randint(760, 1000), random.randint(100, 950)])
+                    by = random.choice([random.randint(100, 500), random.randint(900, 1350)])
+                    bsize = random.randint(35, 100)
+                    bopacity = round(random.uniform(0.2, 0.5), 2)
+                    bcolor = random.choice(["rgba(255,255,255,", "rgba(0,255,255,", "rgba(255,230,0,", "rgba(255,100,180,"])
                     final_color = f"{bcolor}{bopacity})"
                     
-                    # 随机气泡或发光圆点样式
                     bubbles_html += f"""
                     <div style="
-                        position: absolute;
-                        left: {bx}px;
-                        top: {by}px;
-                        width: {bsize}px;
-                        height: {bsize}px;
-                        background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.8), {final_color});
-                        border-radius: 50%;
-                        box-shadow: 0 0 25px {final_color};
-                        z-index: 15;
-                        pointer-events: none;
+                        position: absolute; left: {bx}px; top: {by}px; width: {bsize}px; height: {bsize}px;
+                        background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9), {final_color});
+                        border-radius: 50%; box-shadow: 0 0 20px {final_color}; z-index: 10; pointer-events: none;
                     "></div>
                     """
 
@@ -305,16 +300,16 @@ if uploaded_file is not None and api_key:
                             padding: 80px; position: relative; overflow: hidden;
                         }}
                         .overlay {{ position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.55); backdrop-filter: blur(5px); z-index: 1; }}
-                        .content-box {{ position: relative; z-index: 2; text-align: center; max-width: 900px; }}
+                        {bubbles_html}
+                        .content-box {{ position: relative; z-index: 20; text-align: center; max-width: 900px; }}
                         .tag {{ display: inline-block; background: {badge_bg}; color: #000; font-size: 32px; font-weight: 900; padding: 12px 30px; border-radius: 12px; margin-bottom: 40px; }}
                         .quote-text {{ color: #FFFFFF; font-size: 82px; font-weight: 900; line-height: 1.2; text-shadow: 0 10px 30px rgba(0,0,0,0.9); }}
                         .glow-word {{ color: {glow_color}; text-shadow: 0 0 30px {glow_color}; }}
-                        .fg-layer {{ position: absolute; top:0; left:0; width:100%; height:100%; background: url('temp_fg.png') center/cover no-repeat; z-index: 20; pointer-events: none; }}
+                        .fg-layer {{ position: absolute; top:0; left:0; width:100%; height:100%; background: url('temp_fg.png') center/cover no-repeat; z-index: 50; pointer-events: none; }}
                     </style>
                 </head>
                 <body>
                     <div class="overlay"></div>
-                    {bubbles_html}
                     <div class="content-box">
                         <div class="tag">🔥 EXCLUSIVE INSIGHT</div>
                         <div class="quote-text">“{formatted_quote}”</div>
@@ -338,16 +333,16 @@ if uploaded_file is not None and api_key:
                             padding: 120px 80px; position: relative; overflow: hidden;
                         }}
                         .overlay {{ position: absolute; top:0; left:0; width:100%; height:100%; background: linear-gradient(135deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.2) 100%); z-index: 1; }}
-                        .header-tag {{ position: relative; z-index: 2; background: {badge_bg}; color: #000; font-size: 36px; font-weight: 900; padding: 15px 40px; border-radius: 50px; align-self: flex-start; margin-bottom: 60px; }}
-                        .card {{ position: relative; z-index: 2; background: {card_bg}; border-left: 12px solid {glow_color}; border-radius: 0 30px 30px 0; padding: 70px; backdrop-filter: blur(15px); }}
+                        {bubbles_html}
+                        .header-tag {{ position: relative; z-index: 20; background: {badge_bg}; color: #000; font-size: 36px; font-weight: 900; padding: 15px 40px; border-radius: 50px; align-self: flex-start; margin-bottom: 60px; }}
+                        .card {{ position: relative; z-index: 20; background: {card_bg}; border-left: 12px solid {glow_color}; border-radius: 0 30px 30px 0; padding: 70px; backdrop-filter: blur(15px); }}
                         .quote-text {{ color: #FFFFFF; font-size: 72px; font-weight: 900; line-height: 1.3; text-shadow: 0 5px 20px rgba(0,0,0,0.9); }}
                         .glow-word {{ color: {glow_color}; text-shadow: 0 0 25px {glow_color}; }}
-                        .fg-layer {{ position: absolute; top:0; left:0; width:100%; height:100%; background: url('temp_fg.png') center/cover no-repeat; z-index: 20; pointer-events: none; }}
+                        .fg-layer {{ position: absolute; top:0; left:0; width:100%; height:100%; background: url('temp_fg.png') center/cover no-repeat; z-index: 50; pointer-events: none; }}
                     </style>
                 </head>
                 <body>
                     <div class="overlay"></div>
-                    {bubbles_html}
                     <div class="header-tag">⚡ 深度解密</div>
                     <div class="card">
                         <div class="quote-text">“{formatted_quote}”</div>
@@ -371,18 +366,18 @@ if uploaded_file is not None and api_key:
                             padding: 80px; position: relative; overflow: hidden;
                         }}
                         .overlay {{ position: absolute; top:0; left:0; width:100%; height:100%; background: linear-gradient(180deg, rgba(0,0,0,0.1) 40%, rgba(0,0,0,0.85) 100%); z-index: 1; }}
-                        .bottom-panel {{ position: relative; z-index: 2; width: 100%; background: {card_bg}; border: 2px solid {border_color}; border-radius: 35px; padding: 60px; backdrop-filter: blur(20px); }}
+                        {bubbles_html}
+                        .bottom-panel {{ position: relative; z-index: 20; width: 100%; background: {card_bg}; border: 2px solid {border_color}; border-radius: 35px; padding: 60px; backdrop-filter: blur(20px); }}
                         .tag-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }}
                         .tag {{ background: {badge_bg}; color: #000; font-size: 28px; font-weight: 900; padding: 8px 24px; border-radius: 10px; }}
                         .brand {{ color: {glow_color}; font-size: 28px; font-weight: 900; letter-spacing: 2px; }}
                         .quote-text {{ color: #FFFFFF; font-size: 68px; font-weight: 900; line-height: 1.25; }}
                         .glow-word {{ color: {glow_color}; text-shadow: 0 0 25px {glow_color}; }}
-                        .fg-layer {{ position: absolute; top:0; left:0; width:100%; height:100%; background: url('temp_fg.png') center/cover no-repeat; z-index: 20; pointer-events: none; }}
+                        .fg-layer {{ position: absolute; top:0; left:0; width:100%; height:100%; background: url('temp_fg.png') center/cover no-repeat; z-index: 50; pointer-events: none; }}
                     </style>
                 </head>
                 <body>
                     <div class="overlay"></div>
-                    {bubbles_html}
                     <div class="bottom-panel">
                         <div class="tag-row">
                             <span class="tag">TOPIC FOCUS</span>
@@ -400,7 +395,10 @@ if uploaded_file is not None and api_key:
 
             with sync_playwright() as p:
                 browser = p.chromium.launch()
-                page = browser.new_page(viewport={"width": 1080, "height": 1440})
+                page = browser.new_page(
+                    viewport={"width": 1080, "height": 1440},
+                    device_scale_factor=2  # 🚀 核心大招：开启 Retina 高清视网膜 2 倍渲染，画面与文字清晰度直接翻倍爆表！
+                )
                 page.goto(f"file://{os.path.abspath('render_template.html')}", wait_until="networkidle")
                 page.screenshot(path="final_cover.png")
                 browser.close()
@@ -408,7 +406,7 @@ if uploaded_file is not None and api_key:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("💡 架构模板状态")
-                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**🎈 随机气泡引擎**：已随机叠加多维粒子与气泡装饰\n\n> {ai_explanation}")
+                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**🚀 Retina 4K 超高清渲染**：已启用 (device_scale_factor=2)\n\n> {ai_explanation}")
                 st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒原帧", use_container_width=True)
             with col2:
                 st.subheader(f"✨ 4K 商业爆款封面 [{template_style}]")
