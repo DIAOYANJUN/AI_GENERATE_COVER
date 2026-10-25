@@ -67,7 +67,7 @@ st.sidebar.markdown(f"**当前登录**：`{st.session_state.get('username')}` ({
 if not is_vip:
     with st.sidebar.expander("💳 **升级 VIP 专属权益（微信扫码）**", expanded=True):
         st.write("🔥 **VIP 专享特权**：")
-        st.write("• 解锁高定 Cosplay 与时尚真人模特智能合成")
+        st.write("• 解锁真人模特强力顶层压印合成")
         st.markdown("---")
         st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
         if os.path.exists("pay_qr.png"):
@@ -106,11 +106,11 @@ template_style = st.sidebar.selectbox(
 )
 
 st.sidebar.markdown("---")
-if st.sidebar.button("🎲【随机切换版式 & 刷新 Cosplay 模特】", use_container_width=True):
+if st.sidebar.button("🎲【随机切换版式 & 刷新模特】", use_container_width=True):
     st.session_state.layout_index = random.randint(0, 2)
     st.session_state.bubble_seed = random.randint(1000, 99999)
     st.session_state.beauty_seed = random.randint(1, 100)
-    st.toast("✨ 已随机切换版式并更换 Cosplay 真人模特！")
+    st.toast("✨ 已随机切换版式并更换模特！")
 
 if "layout_index" not in st.session_state:
     st.session_state.layout_index = 0
@@ -204,7 +204,7 @@ if uploaded_file is not None and api_key:
             video.save_frame("temp_frame_raw.jpg", t=target_time)
             video.close()
 
-        with st.spinner("4/4 AI 极智高清修复与 Cosplay 顶流模特无缝合成..."):
+        with st.spinner("4/4 AI 极智高清修复与顶流真人模特强力顶层压印合成..."):
             base_img = Image.open("temp_frame_raw.jpg").convert("RGBA")
             if ai_retouch and is_vip:
                 base_img_rgb = base_img.convert("RGB")
@@ -216,12 +216,12 @@ if uploaded_file is not None and api_key:
                 w, h = base_img.size
                 base_img = base_img.resize((w * 3, h * 3), Image.Resampling.LANCZOS)
             
-            # 🦊 核心升级：扩充 Cosplay 与时尚顶流真人模特图库（每次随机切换）
+            # 🦊 核心大招：直接把真人模特图片强行压印在画布右侧，不走任何复杂的抠图遮罩！
             if enable_partner and is_vip:
                 model_urls = [
-                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80", # 经典精致高颜值
-                    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80", # 甜美元气动漫感
-                    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=80"  # 气场女王风
+                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80",
+                    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80",
+                    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=80"
                 ]
                 try:
                     import urllib.request
@@ -230,19 +230,20 @@ if uploaded_file is not None and api_key:
                     req = urllib.request.Request(chosen_url, headers={'User-Agent': 'Mozilla/5.0'})
                     with urllib.request.urlopen(req) as resp:
                         model_raw = Image.open(BytesIO(resp.read())).convert("RGBA")
-                        model_fg = remove(model_raw)
+                        # 缩放模特尺寸并直接贴在右侧
+                        mw = int(base_img.width * 0.42)
+                        mh = int(base_img.height * 0.75)
+                        model_resized = model_raw.resize((mw, mh), Image.Resampling.LANCZOS)
                         
-                        mw = int(base_img.width * 0.45)
-                        mh = int(base_img.height * 0.78)
-                        model_resized = model_fg.resize((mw, mh), Image.Resampling.LANCZOS)
-                        
-                        paste_x = int(base_img.width * 0.52)
+                        paste_x = int(base_img.width * 0.55)
                         paste_y = int(base_img.height * 0.22)
                         
+                        # 强制无缝贴图压印
                         base_img.paste(model_resized, (paste_x, paste_y), model_resized)
                 except Exception:
                     pass
 
+            # 保存最终背景帧
             base_img.convert("RGB").save("temp_frame.jpg")
             remove(Image.open("temp_frame.jpg")).save("temp_fg.png")
 
@@ -252,7 +253,7 @@ if uploaded_file is not None and api_key:
             "target_time": target_time,
             "ai_explanation": ai_explanation
         }
-        st.success("🎉 高清分析与 Cosplay 顶流模特合成就绪！")
+        st.success("🎉 高清分析与真人模特强力合成就绪！")
 
     if "analyzed_data" in st.session_state:
         data = st.session_state.analyzed_data
@@ -434,8 +435,8 @@ if uploaded_file is not None and api_key:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("💡 架构模板状态")
-                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**🦊 Cosplay 顶流模特陪伴**：已成功随机合成\n\n> {ai_explanation}")
-                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒经模特合成的原帧", use_container_width=True)
+                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**🦊 顶流真人模特陪伴**：已通过顶层强力压印合成\n\n> {ai_explanation}")
+                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒经强力合成的原帧", use_container_width=True)
             with col2:
                 st.subheader(f"✨ 4K 商业爆款封面 [{template_style}]")
                 st.image("final_cover.png", use_container_width=True)
@@ -445,4 +446,4 @@ if uploaded_file is not None and api_key:
         except Exception as e:
             st.error(f"处理失败: {str(e)}")
 elif not api_key:
-    st.info("💡 请在左侧侧边栏输入你的 Groq API Key以启动系统。")
+    st.info("💡 请在左侧侧边栏输入你的 Groq API Key 以启动系统。")
