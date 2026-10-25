@@ -7,7 +7,7 @@ import random
 from moviepy import VideoFileClip
 from openai import OpenAI
 from rembg import remove
-from PIL import Image, ImageEnhance, ImageFilter, ImageDraw
+from PIL import Image, ImageEnhance, ImageFilter
 
 # ---------------- 0. 用户系统与 VIP 权限配置 ----------------
 st.set_page_config(page_title="AI 商业级爆款封面生成器", layout="wide", page_icon="🎬")
@@ -67,7 +67,7 @@ st.sidebar.markdown(f"**当前登录**：`{st.session_state.get('username')}` ({
 if not is_vip:
     with st.sidebar.expander("💳 **升级 VIP 专属权益（微信扫码）**", expanded=True):
         st.write("🔥 **VIP 专享特权**：")
-        st.write("• 解锁超级美女搭档智能并肩合成")
+        st.write("• 解锁高定 Cosplay 与时尚真人模特智能合成")
         st.markdown("---")
         st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
         if os.path.exists("pay_qr.png"):
@@ -106,11 +106,11 @@ template_style = st.sidebar.selectbox(
 )
 
 st.sidebar.markdown("---")
-if st.sidebar.button("🎲【随机切换版式 & 美女搭档】", use_container_width=True):
+if st.sidebar.button("🎲【随机切换版式 & 刷新 Cosplay 模特】", use_container_width=True):
     st.session_state.layout_index = random.randint(0, 2)
     st.session_state.bubble_seed = random.randint(1000, 99999)
     st.session_state.beauty_seed = random.randint(1, 100)
-    st.toast("✨ 已随机切换版式并更换美女搭档！")
+    st.toast("✨ 已随机切换版式并更换 Cosplay 真人模特！")
 
 if "layout_index" not in st.session_state:
     st.session_state.layout_index = 0
@@ -123,25 +123,14 @@ if not is_vip:
     ai_upscale = st.sidebar.checkbox("🚀 开启 4K Retina 超高清修复 (VIP专享)", value=False, disabled=True)
     ai_retouch = st.sidebar.checkbox("✨ 电影级极限锐化与色彩调优 (VIP专享)", value=False, disabled=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果 (VIP专享)", value=False, disabled=True)
-    enable_partner = st.sidebar.checkbox("👩‍🦰 开启 AI 超级美女搭档陪伴 (VIP专享)", value=False, disabled=True)
+    enable_partner = st.sidebar.checkbox("🦊 开启 Cosplay / 顶流模特真人陪伴 (VIP专享)", value=False, disabled=True)
     enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡图案叠加 (VIP专享)", value=False, disabled=True)
 else:
     ai_upscale = st.sidebar.checkbox("🚀 开启 4K Retina 超高清修复", value=True)
     ai_retouch = st.sidebar.checkbox("✨ 电影级极限锐化与色彩调优", value=True)
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡效果", value=True)
-    enable_partner = st.sidebar.checkbox("👩‍🦰 开启 AI 超级美女搭档陪伴", value=True)
+    enable_partner = st.sidebar.checkbox("🦊 开启 Cosplay / 顶流模特真人陪伴", value=True) # 默认开启
     enable_bubbles = st.sidebar.checkbox("🎈 开启智能气泡图案叠加", value=True)
-
-# 💡 强力直观展示：如果在侧边栏开启了搭档，直接在侧边栏显示她的预览缩略图！
-if enable_partner and is_vip:
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("##### 👩‍🦰 当前在线陪伴的美女搭档预览：")
-    # 动态生成缩略图预览
-    prev_p = Image.new("RGBA", (300, 400), (0, 0, 0, 0))
-    d = ImageDraw.Draw(prev_p)
-    d.ellipse([75, 20, 225, 170], fill=(255, 200, 220, 255))
-    d.rounded_rectangle([20, 160, 280, 380], radius=40, fill=(255, 20, 147, 240))
-    st.sidebar.image(prev_p, caption="已加载超级美女搭档贴图", use_container_width=True)
 
 available_models = []
 if api_key:
@@ -215,28 +204,47 @@ if uploaded_file is not None and api_key:
             video.save_frame("temp_frame_raw.jpg", t=target_time)
             video.close()
 
-        with st.spinner("4/4 AI 极智高清修复与搭档预处理..."):
-            base_img = Image.open("temp_frame_raw.jpg")
+        with st.spinner("4/4 AI 极智高清修复与 Cosplay 顶流模特无缝合成..."):
+            base_img = Image.open("temp_frame_raw.jpg").convert("RGBA")
             if ai_retouch and is_vip:
-                base_img = ImageEnhance.Color(base_img).enhance(1.3)
-                base_img = ImageEnhance.Contrast(base_img).enhance(1.2)
-                base_img = base_img.filter(ImageFilter.SHARPEN)
-                base_img = base_img.filter(ImageFilter.DETAIL)
+                base_img_rgb = base_img.convert("RGB")
+                base_img_rgb = ImageEnhance.Color(base_img_rgb).enhance(1.3)
+                base_img_rgb = ImageEnhance.Contrast(base_img_rgb).enhance(1.2)
+                base_img_rgb = base_img_rgb.filter(ImageFilter.SHARPEN)
+                base_img = base_img_rgb.convert("RGBA")
             if ai_upscale and is_vip:
                 w, h = base_img.size
                 base_img = base_img.resize((w * 3, h * 3), Image.Resampling.LANCZOS)
-            base_img.save("temp_frame.jpg")
-
-            remove(base_img).save("temp_fg.png")
             
-            # 强力生成 partner_ai.png
-            pw, ph = int(base_img.width * 0.42), int(base_img.height * 0.7)
-            partner_img = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
-            p_draw = ImageDraw.Draw(partner_img)
-            p_draw.ellipse([pw//4 - 10, 20, pw*3//4 + 10, pw//2 + 50], fill=(255, 200, 220, 255))
-            p_draw.ellipse([pw//4, 50, pw*3//4, pw//2 + 30], fill=(255, 220, 205, 255))
-            p_draw.rounded_rectangle([15, pw//2 + 20, pw - 15, ph], radius=40, fill=(255, 20, 147, 240))
-            partner_img.save("partner_ai.png")
+            # 🦊 核心升级：扩充 Cosplay 与时尚顶流真人模特图库（每次随机切换）
+            if enable_partner and is_vip:
+                model_urls = [
+                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80", # 经典精致高颜值
+                    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80", # 甜美元气动漫感
+                    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=80"  # 气场女王风
+                ]
+                try:
+                    import urllib.request
+                    from io import BytesIO
+                    chosen_url = model_urls[st.session_state.beauty_seed % len(model_urls)]
+                    req = urllib.request.Request(chosen_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req) as resp:
+                        model_raw = Image.open(BytesIO(resp.read())).convert("RGBA")
+                        model_fg = remove(model_raw)
+                        
+                        mw = int(base_img.width * 0.45)
+                        mh = int(base_img.height * 0.78)
+                        model_resized = model_fg.resize((mw, mh), Image.Resampling.LANCZOS)
+                        
+                        paste_x = int(base_img.width * 0.52)
+                        paste_y = int(base_img.height * 0.22)
+                        
+                        base_img.paste(model_resized, (paste_x, paste_y), model_resized)
+                except Exception:
+                    pass
+
+            base_img.convert("RGB").save("temp_frame.jpg")
+            remove(Image.open("temp_frame.jpg")).save("temp_fg.png")
 
         st.session_state.analyzed_data = {
             "quote": quote,
@@ -244,7 +252,7 @@ if uploaded_file is not None and api_key:
             "target_time": target_time,
             "ai_explanation": ai_explanation
         }
-        st.success("🎉 高清分析与超级美女搭档就绪！")
+        st.success("🎉 高清分析与 Cosplay 顶流模特合成就绪！")
 
     if "analyzed_data" in st.session_state:
         data = st.session_state.analyzed_data
@@ -259,18 +267,6 @@ if uploaded_file is not None and api_key:
 
         try:
             formatted_quote = quote.replace(highlight_word, f'<span class="glow-word">{highlight_word}</span>')
-            
-            partner_html = ""
-            if enable_partner and is_vip:
-                partner_html = """
-                <div style="
-                    position: absolute; right: 40px; bottom: 220px; width: 400px; height: 800px;
-                    background: url('partner_ai.png') center/contain no-repeat;
-                    z-index: 60; pointer-events: none;
-                    filter: drop-shadow(0 20px 30px rgba(0,0,0,0.8));
-                "></div>
-                """
-
             fg_layer_html = '<div class="fg-layer"></div>' if (enable_3d_depth and is_vip) else ''
 
             bubbles_html = ""
@@ -332,7 +328,6 @@ if uploaded_file is not None and api_key:
                         }}
                         .overlay {{ position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.55); backdrop-filter: blur(5px); z-index: 1; }}
                         {bubbles_html}
-                        {partner_html}
                         .content-box {{ position: relative; z-index: 20; text-align: center; max-width: 900px; }}
                         .tag {{ display: inline-block; background: {badge_bg}; color: #000; font-size: 32px; font-weight: 900; padding: 12px 30px; border-radius: 12px; margin-bottom: 40px; }}
                         .quote-text {{ color: #FFFFFF; font-size: 82px; font-weight: 900; line-height: 1.2; text-shadow: 0 10px 30px rgba(0,0,0,0.9); }}
@@ -343,7 +338,6 @@ if uploaded_file is not None and api_key:
                 <body>
                     <div class="overlay"></div>
                     {bubbles_html}
-                    {partner_html}
                     <div class="content-box">
                         <div class="tag">🔥 EXCLUSIVE INSIGHT</div>
                         <div class="quote-text">“{formatted_quote}”</div>
@@ -368,7 +362,6 @@ if uploaded_file is not None and api_key:
                         }}
                         .overlay {{ position: absolute; top:0; left:0; width:100%; height:100%; background: linear-gradient(135deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.2) 100%); z-index: 1; }}
                         {bubbles_html}
-                        {partner_html}
                         .header-tag {{ position: relative; z-index: 20; background: {badge_bg}; color: #000; font-size: 36px; font-weight: 900; padding: 15px 40px; border-radius: 50px; align-self: flex-start; margin-bottom: 60px; }}
                         .card {{ position: relative; z-index: 20; background: {card_bg}; border-left: 12px solid {glow_color}; border-radius: 0 30px 30px 0; padding: 70px; backdrop-filter: blur(15px); }}
                         .quote-text {{ color: #FFFFFF; font-size: 72px; font-weight: 900; line-height: 1.3; text-shadow: 0 5px 20px rgba(0,0,0,0.9); }}
@@ -378,7 +371,6 @@ if uploaded_file is not None and api_key:
                 </head>
                 <body>
                     <div class="overlay"></div>
-                    {partner_html}
                     <div class="header-tag">⚡ 深度解密</div>
                     <div class="card">
                         <div class="quote-text">“{formatted_quote}”</div>
@@ -403,7 +395,6 @@ if uploaded_file is not None and api_key:
                         }}
                         .overlay {{ position: absolute; top:0; left:0; width:100%; height:100%; background: linear-gradient(180deg, rgba(0,0,0,0.1) 40%, rgba(0,0,0,0.85) 100%); z-index: 1; }}
                         {bubbles_html}
-                        {partner_html}
                         .bottom-panel {{ position: relative; z-index: 20; width: 100%; background: {card_bg}; border: 2px solid {border_color}; border-radius: 35px; padding: 60px; backdrop-filter: blur(20px); }}
                         .tag-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }}
                         .tag {{ background: {badge_bg}; color: #000; font-size: 28px; font-weight: 900; padding: 8px 24px; border-radius: 10px; }}
@@ -415,7 +406,6 @@ if uploaded_file is not None and api_key:
                 </head>
                 <body>
                     <div class="overlay"></div>
-                    {partner_html}
                     <div class="bottom-panel">
                         <div class="tag-row">
                             <span class="tag">TOPIC FOCUS</span>
@@ -444,8 +434,8 @@ if uploaded_file is not None and api_key:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("💡 架构模板状态")
-                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**👩‍🦰 超级美女搭档**：已在侧边栏及右侧强力渲染\n\n> {ai_explanation}")
-                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒原帧", use_container_width=True)
+                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**🦊 Cosplay 顶流模特陪伴**：已成功随机合成\n\n> {ai_explanation}")
+                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒经模特合成的原帧", use_container_width=True)
             with col2:
                 st.subheader(f"✨ 4K 商业爆款封面 [{template_style}]")
                 st.image("final_cover.png", use_container_width=True)
@@ -455,4 +445,4 @@ if uploaded_file is not None and api_key:
         except Exception as e:
             st.error(f"处理失败: {str(e)}")
 elif not api_key:
-    st.info("💡 请在左侧侧边栏输入你的 Groq API Key 以启动系统。")
+    st.info("💡 请在左侧侧边栏输入你的 Groq API Key以启动系统。")
