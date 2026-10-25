@@ -66,18 +66,17 @@ if uploaded_file is not None and api_key:
                 ]
 
             with st.spinner(f"3/4 大模型 ({model_choice}) 提炼金句并匹配精准画面时间戳..."):
-                prompt = f"""
-                你是一个社媒爆款标题专家。请分析以下带时间戳的视频字幕，挑选出最震撼、最能拉满点击率的 1 句金句。
-                字幕数据：{json.dumps(mock_segments, ensure_ascii=False)}
-                
-                请严格只返回以下 JSON 格式：
-                {{
-                    "golden_quote": "最刺激痛点或引发共鸣的金句（12-18字以内）",
-                    "start_time": 对应这句话在视频中的开始时间秒数(float),
-                    "tag": "爆款分类标签（如：认知觉醒 / 商业逻辑）",
-                    "highlight_word": "金句中最核心需要高亮/发光的词语（2-4字）"
-                }}
-                """
+                prompt = (
+                    "你是一个社媒爆款标题专家。请分析以下带时间戳的视频字幕，挑选出最震撼、最能拉满点击率的 1 句金句。\n"
+                    f"字幕数据：{json.dumps(mock_segments, ensure_ascii=False)}\n\n"
+                    "请严格只返回以下 JSON 格式：\n"
+                    "{\n"
+                    '    "golden_quote": "最刺激痛点或引发共鸣的金句（12-18字以内）",\n'
+                    '    "start_time": 对应这句话在视频中的开始时间秒数(float),\n'
+                    '    "tag": "爆款分类标签（如：认知觉醒 / 商业逻辑）",\n'
+                    '    "highlight_word": "金句中最核心需要高亮/发光的词语（2-4字）"\n'
+                    "}"
+                )
 
                 response = client.chat.completions.create(
                     model=model_choice,
@@ -91,22 +90,4 @@ if uploaded_file is not None and api_key:
                 tag = res.get("tag", "认知觉醒")
                 highlight_word = res.get("highlight_word", "杠杆")
 
-                target_time = min(max(0.5, target_time), duration - 0.5)
-
-                video.save_frame("temp_frame.jpg", t=target_time)
-                video.close()
-
-            with st.spinner("4/4 正在加载 HTML 特效模板并导出 4K 封面..."):
-                formatted_quote = quote.replace(
-                    highlight_word, 
-                    f'<span class="glow-word">{highlight_word}</span>'
-                )
-
-                # 普通多行字符串（不用 f-string，绝不与 CSS 大括号冲突）
-                raw_html = """<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            width: 1080px; height:
+                target_time = min(max(0.5,
