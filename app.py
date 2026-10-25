@@ -67,7 +67,7 @@ st.sidebar.markdown(f"**当前登录**：`{st.session_state.get('username')}` ({
 if not is_vip:
     with st.sidebar.expander("💳 **升级 VIP 专属权益（微信扫码）**", expanded=True):
         st.write("🔥 **VIP 专享特权**：")
-        st.write("• 解锁真人模特强力顶层压印合成")
+        st.write("• 解锁真人模特 HTML 顶层独立渲染")
         st.markdown("---")
         st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
         if os.path.exists("pay_qr.png"):
@@ -204,48 +204,17 @@ if uploaded_file is not None and api_key:
             video.save_frame("temp_frame_raw.jpg", t=target_time)
             video.close()
 
-        with st.spinner("4/4 AI 极智高清修复与顶流真人模特强力顶层压印合成..."):
-            base_img = Image.open("temp_frame_raw.jpg").convert("RGBA")
+        with st.spinner("4/4 AI 极智高清修复与预处理..."):
+            base_img = Image.open("temp_frame_raw.jpg")
             if ai_retouch and is_vip:
-                base_img_rgb = base_img.convert("RGB")
-                base_img_rgb = ImageEnhance.Color(base_img_rgb).enhance(1.3)
-                base_img_rgb = ImageEnhance.Contrast(base_img_rgb).enhance(1.2)
-                base_img_rgb = base_img_rgb.filter(ImageFilter.SHARPEN)
-                base_img = base_img_rgb.convert("RGBA")
+                base_img = ImageEnhance.Color(base_img).enhance(1.3)
+                base_img = ImageEnhance.Contrast(base_img).enhance(1.2)
+                base_img = base_img.filter(ImageFilter.SHARPEN)
             if ai_upscale and is_vip:
                 w, h = base_img.size
                 base_img = base_img.resize((w * 3, h * 3), Image.Resampling.LANCZOS)
-            
-            # 🦊 核心大招：直接把真人模特图片强行压印在画布右侧，不走任何复杂的抠图遮罩！
-            if enable_partner and is_vip:
-                model_urls = [
-                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80",
-                    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80",
-                    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=80"
-                ]
-                try:
-                    import urllib.request
-                    from io import BytesIO
-                    chosen_url = model_urls[st.session_state.beauty_seed % len(model_urls)]
-                    req = urllib.request.Request(chosen_url, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req) as resp:
-                        model_raw = Image.open(BytesIO(resp.read())).convert("RGBA")
-                        # 缩放模特尺寸并直接贴在右侧
-                        mw = int(base_img.width * 0.42)
-                        mh = int(base_img.height * 0.75)
-                        model_resized = model_raw.resize((mw, mh), Image.Resampling.LANCZOS)
-                        
-                        paste_x = int(base_img.width * 0.55)
-                        paste_y = int(base_img.height * 0.22)
-                        
-                        # 强制无缝贴图压印
-                        base_img.paste(model_resized, (paste_x, paste_y), model_resized)
-                except Exception:
-                    pass
-
-            # 保存最终背景帧
-            base_img.convert("RGB").save("temp_frame.jpg")
-            remove(Image.open("temp_frame.jpg")).save("temp_fg.png")
+            base_img.save("temp_frame.jpg")
+            remove(base_img).save("temp_fg.png")
 
         st.session_state.analyzed_data = {
             "quote": quote,
@@ -253,7 +222,7 @@ if uploaded_file is not None and api_key:
             "target_time": target_time,
             "ai_explanation": ai_explanation
         }
-        st.success("🎉 高清分析与真人模特强力合成就绪！")
+        st.success("🎉 高清分析就绪！")
 
     if "analyzed_data" in st.session_state:
         data = st.session_state.analyzed_data
@@ -269,6 +238,25 @@ if uploaded_file is not None and api_key:
         try:
             formatted_quote = quote.replace(highlight_word, f'<span class="glow-word">{highlight_word}</span>')
             fg_layer_html = '<div class="fg-layer"></div>' if (enable_3d_depth and is_vip) else ''
+
+            # 🦊 核心大招：直接在 HTML 顶层（z-index: 80）用网络直连的高清真人模特图片渲染，绝对 100% 可见！
+            partner_html = ""
+            if enable_partner and is_vip:
+                model_urls = [
+                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80",
+                    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80",
+                    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=80"
+                ]
+                chosen_url = model_urls[st.session_state.beauty_seed % len(model_urls)]
+                partner_html = f"""
+                <div style="
+                    position: absolute; right: 20px; bottom: 0px; width: 480px; height: 950px;
+                    background: url('{chosen_url}') center/cover no-repeat;
+                    z-index: 80; pointer-events: none;
+                    mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
+                    -webkit-mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
+                "></div>
+                """
 
             bubbles_html = ""
             if enable_bubbles and is_vip:
@@ -329,6 +317,7 @@ if uploaded_file is not None and api_key:
                         }}
                         .overlay {{ position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.55); backdrop-filter: blur(5px); z-index: 1; }}
                         {bubbles_html}
+                        {partner_html}
                         .content-box {{ position: relative; z-index: 20; text-align: center; max-width: 900px; }}
                         .tag {{ display: inline-block; background: {badge_bg}; color: #000; font-size: 32px; font-weight: 900; padding: 12px 30px; border-radius: 12px; margin-bottom: 40px; }}
                         .quote-text {{ color: #FFFFFF; font-size: 82px; font-weight: 900; line-height: 1.2; text-shadow: 0 10px 30px rgba(0,0,0,0.9); }}
@@ -339,6 +328,7 @@ if uploaded_file is not None and api_key:
                 <body>
                     <div class="overlay"></div>
                     {bubbles_html}
+                    {partner_html}
                     <div class="content-box">
                         <div class="tag">🔥 EXCLUSIVE INSIGHT</div>
                         <div class="quote-text">“{formatted_quote}”</div>
@@ -363,6 +353,7 @@ if uploaded_file is not None and api_key:
                         }}
                         .overlay {{ position: absolute; top:0; left:0; width:100%; height:100%; background: linear-gradient(135deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.2) 100%); z-index: 1; }}
                         {bubbles_html}
+                        {partner_html}
                         .header-tag {{ position: relative; z-index: 20; background: {badge_bg}; color: #000; font-size: 36px; font-weight: 900; padding: 15px 40px; border-radius: 50px; align-self: flex-start; margin-bottom: 60px; }}
                         .card {{ position: relative; z-index: 20; background: {card_bg}; border-left: 12px solid {glow_color}; border-radius: 0 30px 30px 0; padding: 70px; backdrop-filter: blur(15px); }}
                         .quote-text {{ color: #FFFFFF; font-size: 72px; font-weight: 900; line-height: 1.3; text-shadow: 0 5px 20px rgba(0,0,0,0.9); }}
@@ -372,6 +363,7 @@ if uploaded_file is not None and api_key:
                 </head>
                 <body>
                     <div class="overlay"></div>
+                    {partner_html}
                     <div class="header-tag">⚡ 深度解密</div>
                     <div class="card">
                         <div class="quote-text">“{formatted_quote}”</div>
@@ -396,6 +388,7 @@ if uploaded_file is not None and api_key:
                         }}
                         .overlay {{ position: absolute; top:0; left:0; width:100%; height:100%; background: linear-gradient(180deg, rgba(0,0,0,0.1) 40%, rgba(0,0,0,0.85) 100%); z-index: 1; }}
                         {bubbles_html}
+                        {partner_html}
                         .bottom-panel {{ position: relative; z-index: 20; width: 100%; background: {card_bg}; border: 2px solid {border_color}; border-radius: 35px; padding: 60px; backdrop-filter: blur(20px); }}
                         .tag-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }}
                         .tag {{ background: {badge_bg}; color: #000; font-size: 28px; font-weight: 900; padding: 8px 24px; border-radius: 10px; }}
@@ -407,6 +400,7 @@ if uploaded_file is not None and api_key:
                 </head>
                 <body>
                     <div class="overlay"></div>
+                    {partner_html}
                     <div class="bottom-panel">
                         <div class="tag-row">
                             <span class="tag">TOPIC FOCUS</span>
@@ -435,8 +429,8 @@ if uploaded_file is not None and api_key:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("💡 架构模板状态")
-                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**🦊 顶流真人模特陪伴**：已通过顶层强力压印合成\n\n> {ai_explanation}")
-                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒经强力合成的原帧", use_container_width=True)
+                st.info(f"**当前套用模板架构**：`#{current_layout + 1}`\n\n**🦊 真人模特伴侣**：已在 HTML 顶层直接挂载渲染\n\n> {ai_explanation}")
+                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒原帧", use_container_width=True)
             with col2:
                 st.subheader(f"✨ 4K 商业爆款封面 [{template_style}]")
                 st.image("final_cover.png", use_container_width=True)
