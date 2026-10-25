@@ -23,17 +23,28 @@ from playwright.sync_api import sync_playwright
 # ---------------- 2. 页面与配置初始化 ----------------
 st.set_page_config(page_title="AI 商业级爆款封面生成器", layout="wide", page_icon="🎬")
 
-st.title("✨ AI 视频金句时间戳同步 & 3D 商业级封面生成器")
+st.title("✨ AI 视频金句时间戳同步 & 多风格商业封面生成器")
 
 # 侧边栏 API 配置
 st.sidebar.header("🔑 API 配置")
 api_key = st.sidebar.text_input("Groq API Key", type="password")
 base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
-# 商业功能开关
-st.sidebar.header("🎨 商业特效设置")
+# ---------------- 侧边栏新增：封面风格选择 ----------------
+st.sidebar.header("🎨 封面视觉设计")
+
+template_style = st.sidebar.selectbox(
+    "选择封面视觉风格",
+    [
+        "黑金高奢 (Luxury Glass)", 
+        "赛博霓虹 (Cyber Glow)", 
+        "小红书爆款 (High-CTR Yellow)", 
+        "时尚杂志 (Editorial Magazine)"
+    ],
+    index=0
+)
+
 enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡/文字后置效果", value=True, help="使用 AI 抠图将文字穿插在人物身后，大幅提升立体感")
-template_style = st.sidebar.selectbox("封面主题样式", ["黑金高奢 (Luxury Glass)", "赛博发光 (Cyber Glow)"])
 
 # 动态获取对话模型
 available_models = []
@@ -63,7 +74,7 @@ if uploaded_file is not None and api_key:
 
     st.video("temp_video.mp4")
 
-    if st.button("🚀 一键生成 3D 商业爆款封面"):
+    if st.button("🚀 一键生成所选风格封面"):
         try:
             with st.spinner("1/5 正在剥离视频音频..."):
                 video = VideoFileClip("temp_video.mp4")
@@ -128,41 +139,68 @@ if uploaded_file is not None and api_key:
                 with st.spinner("4/5 跳过抠图，准备普通渲染..."):
                     pass
 
-            with st.spinner("5/5 渲染 4K 商业网页特效封面..."):
+            with st.spinner(f"5/5 渲染 [{template_style}] 风格 4K 商业网页封面..."):
                 formatted_quote = quote.replace(
                     highlight_word, 
                     f'<span class="glow-word">{highlight_word}</span>'
                 )
 
-                # 样式与字体定义
+                # ---------------- 根据所选风格配置 CSS 样式 ----------------
                 if "Cyber" in template_style:
+                    # 赛博霓虹
+                    font_import = "@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@800;900&family=Noto+Sans+SC:wght@900&display=swap');"
+                    font_family = "'Orbitron', 'Noto Sans SC', sans-serif"
                     glow_color = "#00FFFF"
                     badge_bg = "linear-gradient(90deg, #00F2FE 0%, #4FACFE 100%)"
+                    card_bg = "rgba(10, 25, 47, 0.55)"
+                    border_color = "rgba(0, 255, 255, 0.4)"
+                    badge_text_color = "#000"
+                elif "Yellow" in template_style:
+                    # 小红书爆款
+                    font_import = "@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Noto+Sans+SC:wght@900&display=swap');"
+                    font_family = "'Montserrat', 'Noto Sans SC', sans-serif"
+                    glow_color = "#FFE600"
+                    badge_bg = "#FFE600"
+                    card_bg = "rgba(0, 0, 0, 0.65)"
+                    border_color = "rgba(255, 230, 0, 0.5)"
+                    badge_text_color = "#000"
+                elif "Magazine" in template_style:
+                    # 时尚杂志
+                    font_import = "@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@800;900&family=Noto+Serif+SC:wght@900&display=swap');"
+                    font_family = "'Cinzel', 'Noto Serif SC', serif"
+                    glow_color = "#E6C200"
+                    badge_bg = "#FFFFFF"
+                    card_bg = "rgba(255, 255, 255, 0.12)"
+                    border_color = "rgba(255, 255, 255, 0.4)"
+                    badge_text_color = "#000"
                 else:
+                    # 黑金高奢 (默认)
+                    font_import = "@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Noto+Sans+SC:wght@900&display=swap');"
+                    font_family = "'Montserrat', 'Noto Sans SC', sans-serif"
                     glow_color = "#FFE600"
                     badge_bg = "linear-gradient(90deg, #FFE600 0%, #FF9900 100%)"
+                    card_bg = "rgba(18, 18, 18, 0.45)"
+                    border_color = "rgba(255, 255, 255, 0.25)"
+                    badge_text_color = "#000"
 
                 html_template = (
                     "<!DOCTYPE html>\n"
                     "<html>\n"
                     "<head>\n"
-                    "    <link rel='preconnect' href='https://fonts.googleapis.com'>\n"
-                    "    <link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>\n"
-                    "    <link href='https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Noto+Sans+SC:wght@900&display=swap' rel='stylesheet'>\n"
                     "    <style>\n"
+                    "        " + font_import + "\n"
                     "        * { box-sizing: border-box; margin: 0; padding: 0; }\n"
                     "        body {\n"
                     "            width: 1080px; height: 1440px;\n"
                     "            background: url('temp_frame.jpg') center/cover no-repeat;\n"
-                    "            font-family: 'Montserrat', 'Noto Sans SC', sans-serif;\n"
+                    "            font-family: " + font_family + ";\n"
                     "            display: flex; flex-direction: column; justify-content: space-between;\n"
                     "            padding: 100px 70px;\n"
                     "            position: relative; overflow: hidden;\n"
                     "        }\n"
-                    "        /* 背景半透明渐变罩 */\n"
                     "        .overlay {\n"
                     "            position: absolute; top:0; left:0; width:100%; height:100%;\n"
-                    "            background: linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.7) 100%);\n"
+                    "            background: linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.75) 100%);\n"
                     "            backdrop-filter: blur(4px);\n"
                     "            z-index: 1;\n"
                     "        }\n"
@@ -170,18 +208,17 @@ if uploaded_file is not None and api_key:
                     "        .tag {\n"
                     "            display: inline-block;\n"
                     "            background: " + badge_bg + ";\n"
-                    "            color: #000; font-size: 36px; font-weight: 900;\n"
+                    "            color: " + badge_text_color + "; font-size: 36px; font-weight: 900;\n"
                     "            padding: 14px 36px; border-radius: 50px;\n"
                     "            box-shadow: 0 10px 25px rgba(0,0,0,0.4);\n"
                     "        }\n"
-                    "        /* 中层：金句卡片（Z-index 为 2） */\n"
                     "        .card-container {\n"
                     "            position: relative; z-index: 2;\n"
-                    "            background: rgba(18, 18, 18, 0.4);\n"
-                    "            border: 2px solid rgba(255, 255, 255, 0.2);\n"
+                    "            background: " + card_bg + ";\n"
+                    "            border: 2px solid " + border_color + ";\n"
                     "            border-radius: 40px; padding: 65px 50px;\n"
-                    "            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);\n"
-                    "            backdrop-filter: blur(12px);\n"
+                    "            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6);\n"
+                    "            backdrop-filter: blur(14px);\n"
                     "        }\n"
                     "        .quote-text {\n"
                     "            color: #FFFFFF; font-size: 76px; font-weight: 900;\n"
@@ -193,7 +230,6 @@ if uploaded_file is not None and api_key:
                     "            text-shadow: 0 0 25px " + glow_color + ";\n"
                     "            display: inline-block; padding: 0 8px;\n"
                     "        }\n"
-                    "        /* 最上层：抠出的人物前景（Z-index 为 3，压在文字上面） */\n"
                     "        .fg-layer {\n"
                     "            position: absolute; top:0; left:0; width:100%; height:100%;\n"
                     "            background: url('temp_fg.png') center/cover no-repeat;\n"
@@ -206,7 +242,7 @@ if uploaded_file is not None and api_key:
                     "            border-top: 1px solid rgba(255, 255, 255, 0.2); padding-top: 35px;\n"
                     "        }\n"
                     "        .badge {\n"
-                    "            background: rgba(0,0,0,0.6); padding: 10px 28px;\n"
+                    "            background: rgba(0,0,0,0.65); padding: 10px 28px;\n"
                     "            border-radius: 14px; color: " + glow_color + "; font-size: 32px; font-weight: 900;\n"
                     "            border: 1px solid rgba(255,255,255,0.2);\n"
                     "        }\n"
@@ -232,7 +268,7 @@ if uploaded_file is not None and api_key:
                     page.screenshot(path="final_cover.png")
                     browser.close()
 
-            st.success("🎯 3D 景深爆款封面导出成功！")
+            st.success(f"🎯 [{template_style}] 风格封面导出成功！")
 
             col1, col2 = st.columns(2)
             with col1:
@@ -240,10 +276,10 @@ if uploaded_file is not None and api_key:
                 st.info(f"**提炼金句**：{quote}\n\n**高亮发光词**：`{highlight_word}`")
                 st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒截图", use_container_width=True)
             with col2:
-                st.subheader("✨ 3D 商业级封面")
+                st.subheader("✨ 商业爆款封面")
                 st.image("final_cover.png", use_container_width=True)
                 with open("final_cover.png", "rb") as f:
-                    st.download_button("📥 下载 4K 华丽封面", f, file_name="commercial_3d_cover.png", mime="image/png")
+                    st.download_button("📥 下载 4K 华丽封面", f, file_name="commercial_cover.png", mime="image/png")
 
         except Exception as e:
             st.error(f"处理失败: {str(e)}")
