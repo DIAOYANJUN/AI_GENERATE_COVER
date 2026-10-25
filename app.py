@@ -16,13 +16,12 @@ USER_DATABASE = {
     "free_user": {"password": "123", "role": "free"}
 }
 
-# 初始化会话状态中的订单与支付网关模拟
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user_role" not in st.session_state:
     st.session_state.user_role = "free"
 if "payment_status" not in st.session_state:
-    st.session_state.payment_status = "NOTPAY"  #可选值: 'NOTPAY', 'SUCCESS', 'FAIL'
+    st.session_state.payment_status = "NOTPAY"
 if "current_order_id" not in st.session_state:
     st.session_state.current_order_id = f"ORD_{int(time.time())}"
 
@@ -79,7 +78,6 @@ if not is_vip:
         st.markdown("---")
         st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
         
-        # 展示微信收款码 pay_qr.png
         if os.path.exists("pay_qr.png"):
             st.image("pay_qr.png", caption="请使用微信扫码支付 (Frenk**君)", use_container_width=True)
         else:
@@ -89,10 +87,9 @@ if not is_vip:
         st.markdown("---")
         st.markdown(f"**订单号**: `{st.session_state.current_order_id}`")
         
-        # 1. 检查支付状态按钮
         if st.button("🔄 检查是否已扫码支付"):
             with st.spinner("正在向支付网关查询扫码及到账状态..."):
-                time.sleep(1) # 模拟网络请求延迟
+                time.sleep(1)
                 current_status = st.session_state.payment_status
                 
                 if current_status == "SUCCESS":
@@ -208,18 +205,23 @@ if uploaded_file is not None and api_key:
                 if not real_segments:
                     real_segments = [{"start": 0.5, "text": "Pro Quality Video Content"}]
 
-            with st.spinner("3/5 大模型分析提炼震撼金句（已锁定稳定输出）..."):
+            with st.spinner("3/5 大模型深度拆解，挑选唯一最优封面帧并生成理由..."):
                 prompt = (
-                    "分析字幕挑选最拉满点击率的 1 句金句。\n"
-                    + f"字幕：{json.dumps(real_segments, ensure_ascii=False)}\n\n"
-                    + "严格只返回 JSON:\n"
-                    + '{"golden_quote": "金句原文", "start_time": 秒数(float), "highlight_word": "高亮词"}'
+                    "分析以下视频字幕，挑选出最震撼、最能拉满点击率的【唯一 1 句金句】，并匹配其在视频中的开始时间秒数。\n"
+                    + f"字幕数据：{json.dumps(real_segments, ensure_ascii=False)}\n\n"
+                    + "请严格只返回以下 JSON 格式（不要包含任何多余 markdown 标记或文字）：\n"
+                    + "{\n"
+                    + '    "golden_quote": "金句原文",\n'
+                    + '    "start_time": 开始秒数(float),\n'
+                    + '    "highlight_word": "核心高亮词",\n'
+                    + '    "explanation": "详细解释为什么选择这句话以及这个时间点的画面（15-30字）"\n'
+                    + "}"
                 )
 
                 response = client.chat.completions.create(
                     model=selected_model,
                     messages=[
-                        {"role": "system", "content": "You are a professional social media title designer that outputs raw JSON."},
+                        {"role": "system", "content": "You are a professional social media title designer that outputs strict raw JSON."},
                         {"role": "user", "content": prompt}
                     ],
                     response_format={"type": "json_object"},
@@ -231,6 +233,7 @@ if uploaded_file is not None and api_key:
                 quote = res.get("golden_quote", real_segments[0]["text"])
                 target_time = float(res.get("start_time", real_segments[0]["start"]))
                 highlight_word = res.get("highlight_word", quote.split()[0] if quote.split() else quote)
+                ai_explanation = res.get("explanation", "精选全片高能痛点，完美匹配视频吸睛瞬间。")
 
                 target_time = min(max(0.5, target_time), duration - 0.5)
 
@@ -374,13 +377,14 @@ if uploaded_file is not None and api_key:
 
             st.success(f"🎯 [{template_style}] 风格封面导出成功！")
 
+            # 展示诊断、原帧与 AI 选帧理由
             col1, col2 = st.columns(2)
             with col1:
-                st.subheader("💡 诊断与原帧")
-                st.info(f"**提炼金句**：{quote}\n\n**高亮发光词**：`{highlight_word}`")
-                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒截图", use_container_width=True)
+                st.subheader("💡 AI 智能诊断与选帧拆解")
+                st.info(f"**🎯 选定金句**：{quote}\n\n**✨ 核心高亮词**：`{highlight_word}`\n\n**⏱️ 匹配画面时间**：第 {target_time:.1f} 秒\n\n**📝 AI 选帧与文案理由**：\n> {ai_explanation}")
+                st.image("temp_frame.jpg", caption=f"视频第 {target_time:.1f} 秒截取的唯一原帧", use_container_width=True)
             with col2:
-                st.subheader("✨ 商业爆款封面")
+                st.subheader("✨ 4K 商业爆款封面")
                 st.image("final_cover.png", use_container_width=True)
                 with open("final_cover.png", "rb") as f:
                     st.download_button("📥 下载 4K 华丽封面", f, file_name="commercial_cover.png", mime="image/png")
