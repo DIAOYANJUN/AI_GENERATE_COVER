@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import json
 import subprocess
-import cv2
+import time
 from moviepy import VideoFileClip
 from openai import OpenAI
 from rembg import remove
@@ -11,19 +11,20 @@ from PIL import Image
 # ---------------- 0. 用户系统与 VIP 权限配置 ----------------
 st.set_page_config(page_title="AI 商业级爆款封面生成器", layout="wide", page_icon="🎬")
 
-# 用户数据库：指定角色 (vip / free)
 USER_DATABASE = {
     "admin": {"password": "123", "role": "vip"},
     "free_user": {"password": "123", "role": "free"}
 }
 
-# 预设 VIP 激活码/兑换码（扫码支付后提供给用户的卡密）
-VIP_ACTIVATION_CODES = ["VIP666", "VIP888", "PRO2026"]
-
+# 初始化会话状态中的订单与支付网关模拟
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user_role" not in st.session_state:
     st.session_state.user_role = "free"
+if "payment_status" not in st.session_state:
+    st.session_state.payment_status = "NOTPAY"  #可选值: 'NOTPAY', 'SUCCESS', 'FAIL'
+if "current_order_id" not in st.session_state:
+    st.session_state.current_order_id = f"ORD_{int(time.time())}"
 
 # 登录流程
 if not st.session_state.logged_in:
@@ -61,47 +62,66 @@ def setup_playwright():
 setup_playwright()
 from playwright.sync_api import sync_playwright
 
-# ---------------- 2. 页面与侧边栏 VIP 系统 ----------------
-st.title("✨ AI 视频金句时间戳同步 & 多风格商业封面生成器")
+# ---------------- 2. 页面与侧边栏支付系统 ----------------
+st.title("✨ AI 视频金句时间戳同步 & 智能商业封面生成器")
 
-# 侧边栏：账号与 VIP 状态
 is_vip = st.session_state.user_role == "vip"
 role_badge = "👑 VIP 尊享会员" if is_vip else "👤 普通免费用户"
 st.sidebar.markdown(f"**当前登录**：`{st.session_state.get('username')}` ({role_badge})")
 
-# 充值 VIP 弹窗 / 展开栏
+# 非 VIP 用户展示微信收款码与实时支付检测
 if not is_vip:
-    with st.sidebar.expander("💳 **升级 VIP 专属权益**", expanded=True):
-        st.write("🔥 **VIP 专属特权**：")
+    with st.sidebar.expander("💳 **升级 VIP 专属权益（微信扫码）**", expanded=True):
+        st.write("🔥 **VIP 专享特权**：")
         st.write("• 解锁小红书爆款 👑 VIP 高对比度配色")
         st.write("• 解锁 3D 人像景深穿插海报特效")
-        st.write("• 无限次导出 4K 超清图形")
         
         st.markdown("---")
-        st.markdown("##### 🟢 推荐使用微信支付 ￥19.9 开通 VIP")
+        st.markdown("##### 🟢 微信扫码支付 ￥19.9 开通")
         
-        # 自动优先读取仓库中的微信二维码 pay_qr.png
+        # 展示微信收款码 pay_qr.png
         if os.path.exists("pay_qr.png"):
-            st.image("pay_qr.png", caption="微信支付 (Frenk**君)", use_container_width=True)
+            st.image("pay_qr.png", caption="请使用微信扫码支付 (Frenk**君)", use_container_width=True)
         else:
-            # 备用网络示例码（提醒用户上传 pay_qr.png）
-            st.warning("⚠️ 请将你的微信二维码重命名为 pay_qr.png 上传至 GitHub 仓库")
+            st.warning("⚠️ 未检测到 pay_qr.png，请上传微信二维码图片到仓库")
             st.image("https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=WeChatPay", caption="微信支付", use_container_width=True)
         
         st.markdown("---")
-        # 激活码兑换
-        input_code = st.text_input("输入支付后获得的 VIP 激活码", key="redeem_code")
-        if st.button("🚀 立即兑换 VIP"):
-            if input_code.strip() in VIP_ACTIVATION_CODES:
-                st.session_state.user_role = "vip"
-                st.success("🎉 激活成功！已升至 VIP 会员！")
-                st.rerun()
-            else:
-                st.error("❌ 激活码无效或已被使用")
+        st.markdown(f"**订单号**: `{st.session_state.current_order_id}`")
+        
+        # 1. 检查支付状态按钮
+        if st.button("🔄 检查是否已扫码支付"):
+            with st.spinner("正在向支付网关查询扫码及到账状态..."):
+                time.sleep(1) # 模拟网络请求延迟
+                current_status = st.session_state.payment_status
+                
+                if current_status == "SUCCESS":
+                    st.session_state.user_role = "vip"
+                    st.success("🎉【支付成功】已检测到付款！VIP 权限已自动开通！")
+                    st.balloons()
+                    time.sleep(1.5)
+                    st.rerun()
+                elif current_status == "FAIL":
+                    st.error("❌【支付失败/已取消】未检测到有效付款，请重新扫码。")
+                else:
+                    st.warning("⏳【未完成支付】尚未检测到扫码付款，请在微信完成支付后再次点击检查。")
+
+        st.markdown("---")
+        st.markdown("##### 🧪 演示调试区（模拟用户手机行为）")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("模拟已付款"):
+                st.session_state.payment_status = "SUCCESS"
+                st.toast("已模拟：用户在手机完成微信支付！")
+        with col_b:
+            if st.button("模拟未付款"):
+                st.session_state.payment_status = "NOTPAY"
+                st.toast("已模拟：未检测到付款。")
 
 if st.sidebar.button("🚪 退出登录"):
     st.session_state.logged_in = False
     st.session_state.user_role = "free"
+    st.session_state.payment_status = "NOTPAY"
     st.rerun()
 
 st.sidebar.markdown("---")
@@ -125,7 +145,6 @@ template_style = st.sidebar.selectbox(
     index=0
 )
 
-# 非 VIP 限制 3D 效果
 if not is_vip:
     enable_3d_depth = st.sidebar.checkbox("开启 3D 人像遮挡/文字后置效果 (VIP 专享)", value=False, disabled=True)
 else:
@@ -160,9 +179,8 @@ if uploaded_file is not None and api_key:
     st.video("temp_video.mp4")
 
     if st.button("🚀 一键生成所选风格封面"):
-        # VIP 风格权限拦截校验
         if "VIP" in template_style and not is_vip:
-            st.error("🔒 该模板为 👑 VIP 独享功能！请在左侧侧边栏扫码支付升级会员后使用。")
+            st.error("🔒 该模板为 👑 VIP 独享功能！请先在左侧侧边栏扫码支付，并通过“检查是否已扫码支付”完成验证。")
             st.stop()
 
         try:
@@ -219,7 +237,6 @@ if uploaded_file is not None and api_key:
                 video.save_frame("temp_frame.jpg", t=target_time)
                 video.close()
 
-            # 抠图处理逻辑
             fg_layer_html = ""
             if enable_3d_depth and is_vip:
                 with st.spinner("4/5 正在进行 AI 人像扣图，合成 3D 景深穿插图层..."):
@@ -237,7 +254,6 @@ if uploaded_file is not None and api_key:
                     f'<span class="glow-word">{highlight_word}</span>'
                 )
 
-                # 样式与字体定义
                 if "Cyber" in template_style:
                     font_import = "@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@800;900&family=Noto+Sans+SC:wght@900&display=swap');"
                     font_family = "'Orbitron', 'Noto Sans SC', sans-serif"
