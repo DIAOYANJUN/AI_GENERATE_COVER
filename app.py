@@ -13,7 +13,6 @@ def setup_playwright():
         from playwright.sync_api import sync_playwright
     except ImportError:
         pass
-    # 自动静默安装 chromium
     subprocess.run(["playwright", "install", "chromium"])
 
 setup_playwright()
@@ -24,10 +23,10 @@ st.set_page_config(page_title="AI 金句爆款封面生成器", layout="wide", p
 
 st.title("🔥 AI 视频金句时间戳同步 & 华丽特效封面生成器")
 
-# 侧边栏 API Key 配置（安全防泄密）
+# 侧边栏 API Key 配置（默认为 Groq 配置）
 st.sidebar.header("🔑 API 配置")
-api_key = st.sidebar.text_input("OpenAI / DeepSeek API Key", type="password", help="请在此处输入你的 API Key，绝对不会公开")
-base_url = st.sidebar.text_input("API Base URL", value="https://api.deepseek.com/v1")
+api_key = st.sidebar.text_input("Groq API Key", type="password", help="请在此处输入你的 Groq API Key")
+base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
 
 uploaded_file = st.file_uploader("上传短视频文件 (MP4 / MOV)", type=["mp4", "mov"])
 
@@ -35,7 +34,6 @@ uploaded_file = st.file_uploader("上传短视频文件 (MP4 / MOV)", type=["mp4
 if uploaded_file is not None and api_key:
     client = OpenAI(api_key=api_key, base_url=base_url)
 
-    # 临时写入文件
     with open("temp_video.mp4", "wb") as f:
         f.write(uploaded_file.read())
 
@@ -49,7 +47,6 @@ if uploaded_file is not None and api_key:
                 video.audio.write_audiofile("temp_audio.mp3", logger=None)
 
             with st.spinner("2/4 正在进行带时间戳的语音识别..."):
-                # 提示：上线生产环境可解开 Whisper 真实调用，此处保留通用 Mock 结构
                 mock_segments = [
                     {"start": 1.5, "end": 4.5, "text": "很多人天天在想怎么赚大钱，结果连底层的商业杠杆都没摸清。"},
                     {"start": 5.2, "end": 9.0, "text": "真正的高手从来不靠体力赚钱，他们用代码和 API 作为杠杆。"},
@@ -70,8 +67,9 @@ if uploaded_file is not None and api_key:
                 }}
                 """
 
+                # 这里已经帮为你替换为 Groq 支持的适配模型：llama-3.3-70b-versatile
                 response = client.chat.completions.create(
-                    model="deepseek-chat",
+                    model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt}],
                     response_format={"type": "json_object"}
                 )
@@ -84,7 +82,6 @@ if uploaded_file is not None and api_key:
 
                 target_time = min(max(0.5, target_time), duration - 0.5)
 
-                # 精准截取对应时间点图像
                 video.save_frame("temp_frame.jpg", t=target_time)
                 video.close()
 
@@ -167,7 +164,6 @@ if uploaded_file is not None and api_key:
                 with open("render_template.html", "w", encoding="utf-8") as f:
                     f.write(html_template)
 
-                # 无头浏览器截图导出
                 with sync_playwright() as p:
                     browser = p.chromium.launch()
                     page = browser.new_page(viewport={"width": 1080, "height": 1440})
@@ -191,4 +187,4 @@ if uploaded_file is not None and api_key:
         except Exception as e:
             st.error(f"处理失败: {str(e)}")
 elif not api_key:
-    st.info("💡 请在左侧侧边栏输入你的 API Key 以启动系统。")
+    st.info("💡 请在左侧侧边栏输入你的 Groq API Key 以启动系统。")
